@@ -166,7 +166,8 @@ var Player = (function () {
         try { ytFrame.src = 'about:blank'; } catch (e) {}
     }
 
-    function playEmbed(videoId) {
+    function playEmbed(videoId, h) {
+        handlers = h || {};
         // Stop any AVPlay/HTML5 playback and surface the iframe.
         if (engine === 'avplay') { avplayStop(); }
         else { try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {} }
