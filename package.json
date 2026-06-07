@@ -1,0 +1,12 @@
+{
+  "name": "tizen-iptv",
+  "version": "1.0.0",
+  "description": "IPTV player for Samsung Tizen TV that streams channels from an M3U/M3U8 playlist.",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "build": "bash scripts/build-wgt.sh"
+  },
+  "keywords": ["tizen", "samsung", "smart-tv", "iptv", "m3u8", "hls", "avplay"],
+  "author": "mohesk",
+  "license": "MIT"
+}

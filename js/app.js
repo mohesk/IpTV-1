@@ -1,0 +1,472 @@
+/* ===========================================================================
+   app.js  -  Application controller / state machine.
+
+   Screens:  splash -> browser  <-> player
+                          \-> settings
+   Wires the playlist loader, the player back-end, focus navigation and the
+   TV remote into one place. No framework: plain DOM + the helper modules.
+   =========================================================================== */
+(function () {
+    'use strict';
+
+    var VERSION = '1.0.0';
+    var OSD_TIMEOUT = 4500;
+    var ZAP_TIMEOUT = 1500;
+
+    var state = {
+        mode: 'splash',          // splash | browser | player | settings
+        area: 'groups',          // browser sub-focus: groups | channels
+        channels: [],            // all channels
+        groups: [],              // [{name, channels}]
+        viewChannels: [],        // channels shown in the channel pane
+        search: '',
+        playList: [],            // list the player is iterating over
+        playIndex: -1,
+        playingId: null,
+        zap: '',
+        zapTimer: null,
+        osdTimer: null,
+        settingsIndex: 0
+    };
+
+    var groupNav, channelNav;
+
+    /* ============================================================ bootstrap */
+    function boot() {
+        UI.cache();
+        Player.init();
+        UI.startClock();
+        KEYS.register();
+
+        document.addEventListener('keydown', onKey, false);
+
+        groupNav = new ListNav(UI.els['group-list'], {
+            onFocus: onGroupFocus
+        });
+        channelNav = new ListNav(UI.els['channel-list'], {
+            onSelect: onChannelSelect
+        });
+
+        loadPlaylist(Store.getPlaylistUrl(), true);
+    }
+
+    /* ============================================================ playlist */
+    function loadPlaylist(url, initial) {
+        state.mode = 'splash';
+        UI.show('splash');
+        UI.setSplashStatus('Loading playlist…');
+
+        Playlist.load(url).then(function (channels) {
+            state.channels = channels;
+            rebuildGroups();
+            enterBrowser();
+            if (initial) { tryResumeLast(); }
+        }).catch(function (err) {
+            UI.setSplashStatus('Failed to load playlist: ' + err.message);
+            // Offer settings after a moment so the user can fix the URL.
+            setTimeout(function () {
+                state.mode = 'browser';
+                openSettings();
+                UI.toast('Could not load playlist. Check the URL.', 4000);
+            }, 1800);
+        });
+    }
+
+    function rebuildGroups() {
+        state.groups = Playlist.groupByCategory(state.channels, Store.getFavorites());
+        UI.renderGroups(state.groups);
+    }
+
+    function tryResumeLast() {
+        var lastId = Store.getLastChannel();
+        if (!lastId) { return; }
+        // Just leave the user on the browser; resume is optional. We surface a
+        // hint instead of auto-playing to avoid surprising the user on launch.
+    }
+
+    /* ============================================================ browser */
+    function enterBrowser() {
+        state.mode = 'browser';
+        state.area = 'groups';
+        UI.show('browser');
+        groupNav.setIndex(0);          // triggers onGroupFocus -> renders channels
+    }
+
+    function onGroupFocus(index) {
+        var group = state.groups[index];
+        if (!group) { return; }
+        state.search = '';
+        UI.setSearch('');
+        state.viewChannels = group.channels;
+        UI.setChannelCount(group.channels.length);
+        UI.renderChannels(group.channels, state.playingId, Store.isFavorite);
+        channelNav.reset();
+        channelNav.setIndex(0, { silent: true });
+        if (state.area === 'channels') {
+            // keep visual focus on the channel side
+            highlightChannelArea(true);
+        } else {
+            highlightChannelArea(false);
+        }
+    }
+
+    function highlightChannelArea(on) {
+        // Toggle which list shows the focus ring.
+        if (on) {
+            groupNav.clearFocus();
+            channelNav.setIndex(channelNav.index);
+            state.area = 'channels';
+        } else {
+            channelNav.clearFocus();
+            groupNav.setIndex(groupNav.index, { silent: true });
+            state.area = 'groups';
+        }
+    }
+
+    function onChannelSelect(index) {
+        var ch = state.viewChannels[index];
+        if (!ch) { return; }
+        state.playList = state.viewChannels.slice();
+        state.playIndex = index;
+        startPlayback(ch);
+    }
+
+    function toggleFavoriteFocused() {
+        if (state.area !== 'channels') {
+            UI.toast('Move to a channel to favorite it.');
+            return;
+        }
+        var ch = state.viewChannels[channelNav.index];
+        if (!ch) { return; }
+        var nowFav = Store.toggleFavorite(ch.id);
+        UI.setFavMark(channelNav.index, nowFav);
+        UI.toast(nowFav ? 'Added to favorites' : 'Removed from favorites');
+        // Rebuild groups so the Favorites category stays accurate.
+        var keepGroup = state.groups[groupNav.index].name;
+        rebuildGroups();
+        var newIdx = state.groups.findIndex(function (g) { return g.name === keepGroup; });
+        groupNav.setIndex(newIdx >= 0 ? newIdx : 0);
+    }
+
+    /* ------- incremental search via the on-screen keyboard ------- */
+    function openSearch() {
+        OSK.open(state.search, function (text) {
+            if (text === null) { return; }
+            applySearch(text.trim());
+        });
+    }
+    function applySearch(term) {
+        state.search = term;
+        UI.setSearch(term);
+        var lc = term.toLowerCase();
+        var matches = !term ? state.channels : state.channels.filter(function (ch) {
+            return ch.name.toLowerCase().indexOf(lc) !== -1 ||
+                   ch.group.toLowerCase().indexOf(lc) !== -1;
+        });
+        state.viewChannels = matches;
+        UI.setChannelCount(matches.length);
+        UI.renderChannels(matches, state.playingId, Store.isFavorite);
+        channelNav.reset();
+        highlightChannelArea(true);
+        if (!matches.length) { UI.toast('No matches for "' + term + '"'); }
+    }
+
+    /* ============================================================ playback */
+    function startPlayback(channel) {
+        state.mode = 'player';
+        state.playingId = channel.id;
+        Store.setLastChannel(channel.id);
+        UI.show('player-screen');
+        UI.hidePlayerError();
+        UI.showSpinner(true, 'Connecting…');
+        UI.showOsd(channel, state.playIndex, 'Loading…');
+        scheduleOsdHide();
+
+        Player.play(channel, {
+            onBuffering: function (on) {
+                UI.showSpinner(on, 'Buffering…');
+                if (on) { UI.setOsdState('Buffering…'); }
+            },
+            onPlaying: function () {
+                UI.showSpinner(false);
+                UI.setOsdState('● Live');
+                scheduleOsdHide();
+            },
+            onEnded: function () {
+                UI.setOsdState('Stream ended');
+                UI.toast('Stream ended');
+            },
+            onError: function (msg) {
+                UI.showSpinner(false);
+                UI.showPlayerError(msg);
+            }
+        });
+    }
+
+    function switchChannel(delta) {
+        if (!state.playList.length) { return; }
+        var n = state.playList.length;
+        state.playIndex = (state.playIndex + delta + n) % n;
+        playCurrentInList();
+    }
+
+    function playCurrentInList() {
+        var ch = state.playList[state.playIndex];
+        if (!ch) { return; }
+        state.playingId = ch.id;
+        Store.setLastChannel(ch.id);
+        UI.hidePlayerError();
+        UI.showOsd(ch, state.playIndex, 'Loading…');
+        UI.showSpinner(true, 'Connecting…');
+        scheduleOsdHide();
+        Player.play(ch, currentPlayHandlers());
+    }
+
+    function currentPlayHandlers() {
+        return {
+            onBuffering: function (on) { UI.showSpinner(on, 'Buffering…'); },
+            onPlaying: function () { UI.showSpinner(false); UI.setOsdState('● Live'); scheduleOsdHide(); },
+            onEnded: function () { UI.setOsdState('Stream ended'); },
+            onError: function (msg) { UI.showSpinner(false); UI.showPlayerError(msg); }
+        };
+    }
+
+    function togglePause() {
+        var st = Player.togglePause();
+        var ch = state.playList[state.playIndex];
+        if (ch) { UI.showOsd(ch, state.playIndex, st === 'paused' ? '❚❚ Paused' : '● Live'); }
+        if (st === 'paused') { clearOsdHide(); } else { scheduleOsdHide(); }
+    }
+
+    function stopPlayback() {
+        Player.stop();
+        UI.hideOsd();
+        UI.hidePlayerError();
+        UI.showSpinner(false);
+        state.mode = 'browser';
+        UI.show('browser');
+        // Reflect the now-playing marker / keep selection where it was.
+        UI.markPlaying(state.viewChannels, state.playingId);
+    }
+
+    function scheduleOsdHide() {
+        clearOsdHide();
+        state.osdTimer = setTimeout(function () { UI.hideOsd(); }, OSD_TIMEOUT);
+    }
+    function clearOsdHide() {
+        if (state.osdTimer) { clearTimeout(state.osdTimer); state.osdTimer = null; }
+    }
+    function bumpOsd() {
+        var ch = state.playList[state.playIndex];
+        if (ch) {
+            UI.showOsd(ch, state.playIndex, Player.isPaused() ? '❚❚ Paused' : '● Live');
+            if (!Player.isPaused()) { scheduleOsdHide(); }
+        }
+    }
+
+    /* ============================================================ zap (numbers) */
+    function pushZap(digit) {
+        state.zap += String(digit);
+        if (state.mode === 'player') { UI.showZap(state.zap); }
+        else { UI.toast('Channel ' + state.zap, ZAP_TIMEOUT + 200); }
+        if (state.zapTimer) { clearTimeout(state.zapTimer); }
+        state.zapTimer = setTimeout(resolveZap, ZAP_TIMEOUT);
+    }
+    function resolveZap() {
+        var entry = state.zap;
+        state.zap = '';
+        UI.showZap('');
+        if (!entry) { return; }
+        var list = state.mode === 'player' ? state.playList : state.viewChannels;
+        var idx = findChannelIndex(list, entry);
+        if (idx === -1) { UI.toast('No channel ' + entry); return; }
+
+        if (state.mode === 'player') {
+            state.playIndex = idx;
+            playCurrentInList();
+        } else {
+            highlightChannelArea(true);
+            channelNav.setIndex(idx);
+        }
+    }
+    function findChannelIndex(list, entry) {
+        // Prefer an explicit channel number, then fall back to 1-based position.
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].chno) === entry) { return i; }
+        }
+        var pos = parseInt(entry, 10) - 1;
+        return (pos >= 0 && pos < list.length) ? pos : -1;
+    }
+
+    /* ============================================================ settings */
+    function openSettings() {
+        state.mode = 'settings';
+        state.settingsIndex = 0;
+        UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+        UI.show('settings');
+        focusSettings(0);
+    }
+    function settingsFields() {
+        return [
+            UI.els['settings-url'],
+            document.getElementById('settings-bundled'),
+            document.getElementById('settings-clear-fav')
+        ];
+    }
+    function focusSettings(i) {
+        var fields = settingsFields();
+        if (i < 0) { i = 0; }
+        if (i >= fields.length) { i = fields.length - 1; }
+        state.settingsIndex = i;
+        fields.forEach(function (f, idx) { f.classList.toggle('focused', idx === i); });
+    }
+    function activateSetting() {
+        switch (state.settingsIndex) {
+            case 0: // edit URL
+                OSK.open(Store.getPlaylistUrl(), function (text) {
+                    if (text === null) { return; }
+                    Store.setPlaylistUrl(text);
+                    UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+                    UI.toast('Playlist URL saved');
+                });
+                break;
+            case 1: // bundled sample
+                Store.setPlaylistUrl(Store.DEFAULT_URL);
+                UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+                UI.toast('Using bundled sample playlist');
+                break;
+            case 2: // clear favorites
+                Store.clearFavorites();
+                UI.toast('Favorites cleared');
+                break;
+        }
+    }
+    function closeSettings() {
+        // Reload using whatever URL is now configured.
+        loadPlaylist(Store.getPlaylistUrl(), false);
+    }
+
+    /* ============================================================ key router */
+    function onKey(e) {
+        var code = e.keyCode;
+
+        // The on-screen keyboard captures everything while open.
+        if (OSK.isOpen()) {
+            if (OSK.handleKey(code)) { e.preventDefault(); }
+            return;
+        }
+
+        var handled = true;
+        switch (state.mode) {
+            case 'browser':  handled = onKeyBrowser(code); break;
+            case 'player':   handled = onKeyPlayer(code); break;
+            case 'settings': handled = onKeySettings(code); break;
+            default:         handled = false;
+        }
+        if (handled) { e.preventDefault(); }
+    }
+
+    function onKeyBrowser(code) {
+        var K = KEYS.map;
+        if (KEYS.isNumber(code)) { pushZap(KEYS.digit(code)); return true; }
+
+        switch (code) {
+            case K.UP:
+                (state.area === 'groups' ? groupNav : channelNav).move(-1);
+                return true;
+            case K.DOWN:
+                (state.area === 'groups' ? groupNav : channelNav).move(1);
+                return true;
+            case K.RIGHT:
+                if (state.area === 'groups' && state.viewChannels.length) {
+                    highlightChannelArea(true);
+                }
+                return true;
+            case K.LEFT:
+                if (state.area === 'channels') { highlightChannelArea(false); }
+                return true;
+            case K.ENTER:
+                if (state.area === 'groups') { highlightChannelArea(true); }
+                else { channelNav.select(); }
+                return true;
+            case K.RED:
+                UI.toast('Reloading playlist…');
+                loadPlaylist(Store.getPlaylistUrl(), false);
+                return true;
+            case K.GREEN:
+                openSettings();
+                return true;
+            case K.YELLOW:
+                toggleFavoriteFocused();
+                return true;
+            case K.BLUE:
+                openSearch();
+                return true;
+            case K.CHANNEL_UP:
+                channelNav.move(-1); return true;
+            case K.CHANNEL_DOWN:
+                channelNav.move(1); return true;
+            default:
+                if (KEYS.isBack(code)) { exitApp(); return true; }
+                return false;
+        }
+    }
+
+    function onKeyPlayer(code) {
+        var K = KEYS.map;
+        if (KEYS.isNumber(code)) { pushZap(KEYS.digit(code)); return true; }
+
+        switch (code) {
+            case K.ENTER:
+            case K.MEDIA_PLAY_PAUSE:
+                togglePause(); return true;
+            case K.MEDIA_PLAY:
+                if (Player.isPaused()) { togglePause(); } return true;
+            case K.MEDIA_PAUSE:
+                if (!Player.isPaused()) { togglePause(); } return true;
+            case K.MEDIA_STOP:
+                stopPlayback(); return true;
+            case K.UP:
+            case K.CHANNEL_UP:
+                switchChannel(-1); return true;
+            case K.DOWN:
+            case K.CHANNEL_DOWN:
+                switchChannel(1); return true;
+            case K.LEFT:
+            case K.RIGHT:
+                bumpOsd(); return true;
+            default:
+                if (KEYS.isBack(code)) { stopPlayback(); return true; }
+                return false;
+        }
+    }
+
+    function onKeySettings(code) {
+        var K = KEYS.map;
+        switch (code) {
+            case K.UP:    focusSettings(state.settingsIndex - 1); return true;
+            case K.DOWN:  focusSettings(state.settingsIndex + 1); return true;
+            case K.ENTER: activateSetting(); return true;
+            default:
+                if (KEYS.isBack(code)) { closeSettings(); return true; }
+                return false;
+        }
+    }
+
+    function exitApp() {
+        try {
+            if (typeof tizen !== 'undefined' && tizen.application) {
+                tizen.application.getCurrentApplication().exit();
+                return;
+            }
+        } catch (e) {}
+        UI.toast('Press Back on the TV remote to exit.');
+    }
+
+    /* ============================================================ go */
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
+})();

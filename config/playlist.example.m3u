@@ -1,0 +1,22 @@
+#EXTM3U
+# Sample playlist for the Tizen IPTV app.
+# Replace this with your own M3U / M3U8 URL in Settings (green button).
+# These are public test HLS streams (Apple / Mux / Akamai reference assets).
+
+#EXTINF:-1 tvg-id="bipbop" tvg-name="Apple BipBop" tvg-logo="" group-title="Test Streams",Apple BipBop (Adaptive)
+https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8
+
+#EXTINF:-1 tvg-id="muxtest" tvg-name="Mux Test Stream" tvg-logo="" group-title="Test Streams",Mux Low Latency Test
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
+
+#EXTINF:-1 tvg-id="tearsofsteel" tvg-name="Tears of Steel" tvg-logo="" group-title="Demo",Tears of Steel (HLS)
+https://test-streams.mux.dev/tos_ismc/main.m3u8
+
+#EXTINF:-1 tvg-id="bbb" tvg-name="Big Buck Bunny" tvg-logo="" group-title="Demo",Big Buck Bunny (HLS)
+https://test-streams.mux.dev/pts_shift/master.m3u8
+
+#EXTINF:-1 tvg-id="sintel" tvg-name="Sintel" tvg-logo="" group-title="Demo",Sintel Trailer (HLS)
+https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8
+
+#EXTINF:-1 tvg-id="akamai" tvg-name="Akamai Live" tvg-logo="" group-title="Test Streams",Akamai Reference Live
+https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8
