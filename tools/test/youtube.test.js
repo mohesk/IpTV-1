@@ -80,3 +80,21 @@ test('deepFindVideo handles headline + simpleText title shape', () => {
   assert.strictEqual(v.sinceText, 'Streamed 5 hours ago');
   assert.strictEqual(v.thumbnail, 'https://i.ytimg.com/vi/HX1/hqdefault.jpg');
 });
+
+test('parseProbeHtml -> live for a live page', () => {
+  const s = YT.parseProbeHtml(LIVE_HTML);
+  assert.strictEqual(s.state, 'live');
+  assert.strictEqual(s.videoId, 'LIVEvid123');
+});
+
+test('parseProbeHtml -> offline with sinceText for an offline page', () => {
+  const s = YT.parseProbeHtml(OFFLINE_HTML);
+  assert.strictEqual(s.state, 'offline');
+  assert.strictEqual(s.videoId, 'PASTvid456');
+  assert.strictEqual(s.sinceText, 'Streamed 2 days ago');
+});
+
+test('parseProbeHtml -> error for an unusable page', () => {
+  assert.strictEqual(YT.parseProbeHtml('<html></html>').state, 'error');
+  assert.strictEqual(YT.parseProbeHtml(null).state, 'error');
+});

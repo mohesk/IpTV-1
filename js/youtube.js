@@ -120,10 +120,33 @@ var YT = (function () {
         return null;
     }
 
+    // Classify a fetched /live page into a status object.
+    function parseProbeHtml(html) {
+        if (typeof html !== 'string' || !html) { return { state: 'error' }; }
+
+        var player = extractJsonObject(html, 'ytInitialPlayerResponse');
+        var live = classify(player);
+        if (live) { return live; }
+
+        var data = extractJsonObject(html, 'ytInitialData');
+        var vid = data ? deepFindVideo(data) : null;
+        if (vid && vid.videoId) {
+            return {
+                state: 'offline',
+                videoId: vid.videoId,
+                title: vid.title,
+                thumbnail: vid.thumbnail,
+                sinceText: vid.sinceText || 'recently'
+            };
+        }
+        return { state: 'error' };
+    }
+
     return {
         extractJsonObject: extractJsonObject,
         classify: classify,
-        deepFindVideo: deepFindVideo
+        deepFindVideo: deepFindVideo,
+        parseProbeHtml: parseProbeHtml
     };
 })();
 
