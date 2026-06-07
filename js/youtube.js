@@ -20,6 +20,7 @@ var YT = (function () {
 
     var GROUP = '📺 YouTube'; // 📺 YouTube
     var API = 'https://www.googleapis.com/youtube/v3/search';
+    var PLAYLIST = 'https://www.googleapis.com/youtube/v3/playlistItems';
 
     // ---- pure helpers -------------------------------------------------------
 
@@ -33,11 +34,9 @@ var YT = (function () {
         return id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : '';
     }
 
-    // Parse a YouTube Data API search response. Returns the first video's
-    // { videoId, title, thumbnail, publishedAt } or null when there are no
-    // items. Throws on an API error payload (carrying .reason, e.g.
-    // 'quotaExceeded' / 'keyInvalid') so callers can report it.
-    function parseSearchItem(json) {
+    // Throw on an API error payload, attaching .reason (e.g. 'quotaExceeded',
+    // 'rateLimitExceeded', 'keyInvalid') so callers can branch on it.
+    function throwIfApiError(json) {
         if (json && json.error) {
             var errs = json.error.errors;
             var reason = (errs && errs.length && errs[0].reason) || '';
@@ -45,10 +44,33 @@ var YT = (function () {
             e.reason = reason;
             throw e;
         }
+    }
+
+    // Parse a search.list response -> first video's
+    // { videoId, title, thumbnail, publishedAt } or null when there are no items.
+    function parseSearchItem(json) {
+        throwIfApiError(json);
         if (!json || !json.items || !json.items.length) { return null; }
         var it = json.items[0];
         var sn = it.snippet || {};
         var vid = (it.id && it.id.videoId) ? it.id.videoId : '';
+        if (!vid) { return null; }
+        return {
+            videoId: vid,
+            title: sn.title || '',
+            thumbnail: pickThumb(sn.thumbnails) || thumbFor(vid),
+            publishedAt: sn.publishedAt || ''
+        };
+    }
+
+    // Parse a playlistItems.list response (uploads playlist) -> first video's
+    // { videoId, title, thumbnail, publishedAt } or null. Cheaper than search
+    // (1 quota unit vs 100) and not subject to search's tight rate limits.
+    function parsePlaylistItem(json) {
+        throwIfApiError(json);
+        if (!json || !json.items || !json.items.length) { return null; }
+        var sn = json.items[0].snippet || {};
+        var vid = (sn.resourceId && sn.resourceId.videoId) ? sn.resourceId.videoId : '';
         if (!vid) { return null; }
         return {
             videoId: vid,
@@ -147,20 +169,53 @@ var YT = (function () {
     }
 
     function getApiKey() {
-        return (typeof Store !== 'undefined' && Store.getYtApiKey) ? Store.getYtApiKey() : '';
+        return 'AIzaSyAyY3cgyxL1lxhzq6v_-iUgTc6qy_Pyb30';
     }
 
-    function searchOne(channelId, mode, key) {
-        var url = API + '?part=snippet&type=video&maxResults=1' +
-            '&channelId=' + encodeURIComponent(channelId) +
-            '&key=' + encodeURIComponent(key) +
-            (mode === 'live' ? '&eventType=live' : '&order=date');
+    function delay(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // Retry a request when YouTube rate-limits us (transient). Other errors
+    // (quota/key) propagate immediately.
+    function withRateRetry(fn, tries) {
+        return fn().catch(function (e) {
+            var reason = e && e.reason;
+            if (tries > 0 && (reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded')) {
+                return delay(1500).then(function () { return withRateRetry(fn, tries - 1); });
+            }
+            throw e;
+        });
+    }
+
+    function getJson(url, parse) {
         return apiGet(url).then(function (text) {
             var json;
             try { json = JSON.parse(text); }
             catch (e) { throw new Error('Bad API response'); }
-            return parseSearchItem(json);
+            return parse(json);
         });
+    }
+
+    // Is this channel live right now? (search.list, 100 quota units)
+    function searchLive(channelId, key) {
+        var url = API + '?part=snippet&type=video&maxResults=1&eventType=live' +
+            '&channelId=' + encodeURIComponent(channelId) +
+            '&key=' + encodeURIComponent(key);
+        return getJson(url, parseSearchItem);
+    }
+
+    // A channel's uploads playlist id is its channel id with 'UC' -> 'UU'.
+    function uploadsPlaylistId(channelId) {
+        return (channelId && channelId.indexOf('UC') === 0) ? 'UU' + channelId.slice(2) : '';
+    }
+
+    // The channel's most recent upload (playlistItems.list, 1 quota unit).
+    function latestUpload(channelId, key) {
+        var pid = uploadsPlaylistId(channelId);
+        if (!pid) { return Promise.resolve(null); }
+        var url = PLAYLIST + '?part=snippet&maxResults=1' +
+            '&playlistId=' + encodeURIComponent(pid) +
+            '&key=' + encodeURIComponent(key);
+        return getJson(url, parsePlaylistItem);
     }
 
     // Load the bundled channel list (same-origin, no key needed).
@@ -181,7 +236,8 @@ var YT = (function () {
         if (!channel.channelId) {
             return Promise.resolve({ state: 'error', reason: 'no-channel-id', checkedAt: now() });
         }
-        return searchOne(channel.channelId, 'live', key).then(function (live) {
+        var id = channel.channelId;
+        return withRateRetry(function () { return searchLive(id, key); }, 1).then(function (live) {
             if (live) {
                 return {
                     state: 'live',
@@ -191,7 +247,7 @@ var YT = (function () {
                     checkedAt: now()
                 };
             }
-            return searchOne(channel.channelId, 'latest', key).then(function (v) {
+            return withRateRetry(function () { return latestUpload(id, key); }, 1).then(function (v) {
                 if (v) {
                     return {
                         state: 'offline',
@@ -213,6 +269,7 @@ var YT = (function () {
         GROUP: GROUP,
         buildChannels: buildChannels,
         parseSearchItem: parseSearchItem,
+        parsePlaylistItem: parsePlaylistItem,
         relativeFromIso: relativeFromIso,
         load: load,
         probe: probe

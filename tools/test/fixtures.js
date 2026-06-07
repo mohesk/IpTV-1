@@ -32,6 +32,22 @@ const LATEST_SEARCH = {
   }]
 };
 
+// A playlistItems.list response (a channel's uploads playlist) — used for the
+// "latest video" / offline state.
+const UPLOADS_PLAYLIST = {
+  items: [{
+    snippet: {
+      title: 'Latest Upload',
+      publishedAt: '2026-06-06T09:00:00Z',
+      resourceId: { kind: 'youtube#video', videoId: 'UPLOADvid789' },
+      thumbnails: {
+        default: { url: 'https://i.ytimg.com/vi/UPLOADvid789/default.jpg' },
+        high: { url: 'https://i.ytimg.com/vi/UPLOADvid789/hqdefault.jpg' }
+      }
+    }
+  }]
+};
+
 // No results (channel not live / no videos).
 const EMPTY_SEARCH = { kind: 'youtube#searchListResponse', items: [] };
 
@@ -44,4 +60,4 @@ const ERROR_QUOTA = {
   }
 };
 
-module.exports = { LIVE_SEARCH, LATEST_SEARCH, EMPTY_SEARCH, ERROR_QUOTA };
+module.exports = { LIVE_SEARCH, LATEST_SEARCH, UPLOADS_PLAYLIST, EMPTY_SEARCH, ERROR_QUOTA };

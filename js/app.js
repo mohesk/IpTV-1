@@ -33,7 +33,7 @@
         osdTimer: null,
         settingsIndex: 0,
         ytRefreshTimer: null,    // periodic re-probe while the YT group is open
-        ytConcurrency: 4         // max parallel probes
+        ytConcurrency: 1         // probe serially — bursts trip the API rate limit
     };
 
     var groupNav, channelNav;
@@ -209,6 +209,9 @@
         }
         if (reason === 'quotaExceeded') {
             return 'YouTube API daily quota reached. Try again later.';
+        }
+        if (reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') {
+            return 'YouTube is rate-limiting requests. Wait a few seconds and try again.';
         }
         if (reason === 'keyInvalid' || reason === 'badRequest') {
             return 'The YouTube API key is invalid. Check it in Settings.';

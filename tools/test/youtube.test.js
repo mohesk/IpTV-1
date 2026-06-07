@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const YT = require('../../js/youtube.js');
-const { LIVE_SEARCH, LATEST_SEARCH, EMPTY_SEARCH, ERROR_QUOTA } = require('./fixtures.js');
+const { LIVE_SEARCH, LATEST_SEARCH, UPLOADS_PLAYLIST, EMPTY_SEARCH, ERROR_QUOTA } = require('./fixtures.js');
 
 /* ---------------------------------------------------- parseSearchItem ---- */
 
@@ -35,6 +35,23 @@ test('parseSearchItem throws on an API error, carrying the reason', () => {
     () => YT.parseSearchItem(ERROR_QUOTA),
     (e) => e.reason === 'quotaExceeded'
   );
+});
+
+/* -------------------------------------------------- parsePlaylistItem ---- */
+
+test('parsePlaylistItem returns the latest upload (videoId from resourceId)', () => {
+  const v = YT.parsePlaylistItem(UPLOADS_PLAYLIST);
+  assert.ok(v);
+  assert.strictEqual(v.videoId, 'UPLOADvid789');
+  assert.strictEqual(v.title, 'Latest Upload');
+  assert.strictEqual(v.thumbnail, 'https://i.ytimg.com/vi/UPLOADvid789/hqdefault.jpg');
+  assert.strictEqual(v.publishedAt, '2026-06-06T09:00:00Z');
+});
+
+test('parsePlaylistItem returns null for empty / missing videoId, throws on API error', () => {
+  assert.strictEqual(YT.parsePlaylistItem({ items: [] }), null);
+  assert.strictEqual(YT.parsePlaylistItem({ items: [{ snippet: {} }] }), null);
+  assert.throws(() => YT.parsePlaylistItem(ERROR_QUOTA), (e) => e.reason === 'quotaExceeded');
 });
 
 /* ---------------------------------------------------- relativeFromIso ---- */

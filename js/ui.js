@@ -257,6 +257,7 @@ var UI = (function () {
             if (badge) { badge.classList.add('hidden'); }
             if (status.reason === 'no-key') { sub.textContent = 'Set API key in Settings'; }
             else if (status.reason === 'quotaExceeded') { sub.textContent = 'API quota reached'; }
+            else if (status.reason === 'rateLimitExceeded' || status.reason === 'userRateLimitExceeded') { sub.textContent = 'Rate limited — retrying'; }
             else { sub.textContent = 'Status unavailable'; }
         }
     }
