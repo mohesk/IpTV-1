@@ -98,3 +98,21 @@ test('parseProbeHtml -> error for an unusable page', () => {
   assert.strictEqual(YT.parseProbeHtml('<html></html>').state, 'error');
   assert.strictEqual(YT.parseProbeHtml(null).state, 'error');
 });
+
+test('buildChannels maps entries to channel objects', () => {
+  const chans = YT.buildChannels([
+    { handle: '@RadioShemroon', name: 'Radio Shemroon' },
+    { handle: 'TousiTV' }
+  ]);
+  assert.strictEqual(chans.length, 2);
+  assert.strictEqual(chans[0].id, 'yt:RadioShemroon');   // leading @ stripped
+  assert.strictEqual(chans[0].handle, 'RadioShemroon');
+  assert.strictEqual(chans[0].type, 'youtube');
+  assert.strictEqual(chans[0].group, '📺 YouTube');
+  assert.strictEqual(chans[1].name, 'TousiTV');          // falls back to handle
+});
+
+test('buildChannels ignores bad entries', () => {
+  assert.deepStrictEqual(YT.buildChannels(null), []);
+  assert.strictEqual(YT.buildChannels([{}, { handle: 'x' }]).length, 1);
+});

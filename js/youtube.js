@@ -142,11 +142,38 @@ var YT = (function () {
         return { state: 'error' };
     }
 
+    var GROUP = '📺 YouTube'; // 📺 YouTube
+
+    // Map the JSON list to channel objects compatible with the app's model.
+    function buildChannels(list) {
+        if (!Array.isArray(list)) { return []; }
+        return list
+            .filter(function (e) { return e && e.handle; })
+            .map(function (e) {
+                var handle = String(e.handle).replace(/^@/, '');
+                return {
+                    id: 'yt:' + handle,
+                    name: e.name || handle,
+                    url: '',
+                    logo: '',
+                    group: GROUP,
+                    type: 'youtube',
+                    handle: handle,
+                    chno: '',
+                    attrs: {},
+                    yt: null,
+                    index: 0
+                };
+            });
+    }
+
     return {
+        GROUP: GROUP,
         extractJsonObject: extractJsonObject,
         classify: classify,
         deepFindVideo: deepFindVideo,
-        parseProbeHtml: parseProbeHtml
+        parseProbeHtml: parseProbeHtml,
+        buildChannels: buildChannels
     };
 })();
 
