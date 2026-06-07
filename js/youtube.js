@@ -79,7 +79,7 @@ var YT = (function () {
     function textOf(t) {
         if (!t) { return ''; }
         if (typeof t === 'string') { return t; }
-        if (t.simpleText) { return t.simpleText; }
+        if (t.simpleText !== undefined) { return t.simpleText; }
         if (t.runs && t.runs.length) {
             return t.runs.map(function (r) { return r.text || ''; }).join('');
         }
@@ -91,7 +91,7 @@ var YT = (function () {
     function deepFindVideo(node, guard) {
         guard = guard || { n: 0 };
         if (!node || typeof node !== 'object') { return null; }
-        if (guard.n++ > 300000) { return null; } // safety bound on huge pages
+        if (guard.n++ > 300000) { return null; } // bound total nodes visited (YouTube JSON is wide, not deep)
 
         if (node.videoId && (node.title || node.headline)) {
             return {

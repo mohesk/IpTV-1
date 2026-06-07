@@ -68,3 +68,15 @@ test('deepFindVideo returns null when no video node exists', () => {
   assert.strictEqual(YT.deepFindVideo({a: {b: [1, 2, 3]}}), null);
   assert.strictEqual(YT.deepFindVideo(null), null);
 });
+
+test('deepFindVideo handles headline + simpleText title shape', () => {
+  const node = { stuff: { videoRenderer: {
+    videoId: 'HX1', headline: { simpleText: 'A Headline Title' },
+    publishedTimeText: { simpleText: 'Streamed 5 hours ago' }
+  } } };
+  const v = YT.deepFindVideo(node);
+  assert.strictEqual(v.videoId, 'HX1');
+  assert.strictEqual(v.title, 'A Headline Title');
+  assert.strictEqual(v.sinceText, 'Streamed 5 hours ago');
+  assert.strictEqual(v.thumbnail, 'https://i.ytimg.com/vi/HX1/hqdefault.jpg');
+});
