@@ -254,6 +254,7 @@
     }
 
     function playYouTube(channel) {
+        stopYtProbing();
         state.mode = 'player';
         state.playingId = channel.id;
         Store.setLastChannel(channel.id);
@@ -297,6 +298,7 @@
         state.playingId = ch.id;
         Store.setLastChannel(ch.id);
         UI.hidePlayerError();
+        if (ch.type === 'youtube') { playYouTube(ch); return; }
         UI.showOsd(ch, state.playIndex, 'Loading…');
         UI.showSpinner(true, 'Connecting…');
         scheduleOsdHide();
