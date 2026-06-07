@@ -13,6 +13,10 @@
     var OSD_TIMEOUT = 4500;
     var ZAP_TIMEOUT = 1500;
     var YT_TTL = 300000;          // reuse a YouTube probe result for 5 min (saves API quota)
+    // Default https "referrer-bounce" player page (overridable in Settings).
+    // Required because a YouTube embed from the app's file:// origin fails with
+    // Error 153; loading it from this https page gives YouTube a valid referrer.
+    var YT_PLAYER_DEFAULT = 'https://mohesk.github.io/IpTV-1/player.html';
 
     var state = {
         mode: 'splash',          // splash | browser | player | settings
@@ -192,12 +196,8 @@
     // With no page configured, fall back to a direct embed (works only in a
     // desktop dev browser).
     function ytEmbedUrl(videoId) {
-        var base = Store.getYtPlayerUrl();
-        if (base) {
-            return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'v=' + encodeURIComponent(videoId);
-        }
-        return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(videoId) +
-               '?autoplay=1&playsinline=1&rel=0';
+        var base = Store.getYtPlayerUrl() || YT_PLAYER_DEFAULT;
+        return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'v=' + encodeURIComponent(videoId);
     }
 
     function ytErrorMessage(reason) {
