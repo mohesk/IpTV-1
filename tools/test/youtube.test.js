@@ -53,3 +53,18 @@ test('classify returns null on missing input', () => {
   assert.strictEqual(YT.classify(null), null);
   assert.strictEqual(YT.classify({}), null);
 });
+
+test('deepFindVideo finds the first video node with id + title', () => {
+  const data = YT.extractJsonObject(OFFLINE_HTML, 'ytInitialData');
+  const v = YT.deepFindVideo(data);
+  assert.ok(v);
+  assert.strictEqual(v.videoId, 'PASTvid456');
+  assert.strictEqual(v.title, "Yesterday's Stream");
+  assert.strictEqual(v.sinceText, 'Streamed 2 days ago');
+  assert.strictEqual(v.thumbnail, 'https://i.ytimg.com/vi/PASTvid456/hqdefault.jpg');
+});
+
+test('deepFindVideo returns null when no video node exists', () => {
+  assert.strictEqual(YT.deepFindVideo({a: {b: [1, 2, 3]}}), null);
+  assert.strictEqual(YT.deepFindVideo(null), null);
+});

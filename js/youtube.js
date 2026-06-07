@@ -75,9 +75,55 @@ var YT = (function () {
         return null;
     }
 
+    // Flatten a YouTube text object ({simpleText} or {runs:[{text}]}) to a string.
+    function textOf(t) {
+        if (!t) { return ''; }
+        if (typeof t === 'string') { return t; }
+        if (t.simpleText) { return t.simpleText; }
+        if (t.runs && t.runs.length) {
+            return t.runs.map(function (r) { return r.text || ''; }).join('');
+        }
+        return '';
+    }
+
+    // Depth-first search for the first node that looks like a video
+    // (has a videoId and a title/headline). Returns its id/title/thumb/since.
+    function deepFindVideo(node, guard) {
+        guard = guard || { n: 0 };
+        if (!node || typeof node !== 'object') { return null; }
+        if (guard.n++ > 300000) { return null; } // safety bound on huge pages
+
+        if (node.videoId && (node.title || node.headline)) {
+            return {
+                videoId: node.videoId,
+                title: textOf(node.title || node.headline),
+                thumbnail: pickThumb(node.thumbnail) || thumbFor(node.videoId),
+                sinceText: textOf(node.publishedTimeText)
+            };
+        }
+
+        if (Array.isArray(node)) {
+            for (var i = 0; i < node.length; i++) {
+                var r = deepFindVideo(node[i], guard);
+                if (r) { return r; }
+            }
+        } else {
+            for (var k in node) {
+                if (!Object.prototype.hasOwnProperty.call(node, k)) { continue; }
+                var v = node[k];
+                if (v && typeof v === 'object') {
+                    var r2 = deepFindVideo(v, guard);
+                    if (r2) { return r2; }
+                }
+            }
+        }
+        return null;
+    }
+
     return {
         extractJsonObject: extractJsonObject,
-        classify: classify
+        classify: classify,
+        deepFindVideo: deepFindVideo
     };
 })();
 
