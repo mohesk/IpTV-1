@@ -197,6 +197,8 @@ var Player = (function () {
 
     function stop() {
         hideEmbed();
+        if (engine === 'avplay') { if (avObj) { avObj.style.display = 'block'; } }
+        else if (video) { video.style.display = 'block'; }
         if (engine === 'avplay') {
             avplayStop();
         } else {

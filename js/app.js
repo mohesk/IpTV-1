@@ -54,6 +54,7 @@
 
     /* ============================================================ playlist */
     function loadPlaylist(url, initial) {
+        stopYtProbing();
         state.mode = 'splash';
         UI.show('splash');
         UI.setSplashStatus('Loading playlist…');
@@ -322,6 +323,7 @@
     }
 
     function stopPlayback() {
+        stopYtProbing();
         Player.stop();
         UI.hideOsd();
         UI.hidePlayerError();
