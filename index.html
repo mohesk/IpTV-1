@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1920, height=1080, user-scalable=no">
+    <title>IPTV</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- ===== Splash / loading ===== -->
+    <div id="splash" class="screen splash">
+        <div class="splash-logo">IPTV</div>
+        <div id="splash-status" class="splash-status">Loading playlist&hellip;</div>
+    </div>
+
+    <!-- ===== Channel browser ===== -->
+    <div id="browser" class="screen browser hidden">
+        <header class="browser-header">
+            <h1 class="brand">IPTV</h1>
+            <div class="browser-meta">
+                <span id="channel-count" class="channel-count"></span>
+                <span id="clock" class="clock"></span>
+            </div>
+        </header>
+
+        <main class="browser-body">
+            <!-- Category / group list -->
+            <nav id="group-list" class="group-list" aria-label="Categories"></nav>
+
+            <!-- Channels for the selected group -->
+            <section class="channel-pane">
+                <div id="channel-search" class="channel-search hidden">
+                    <span class="search-label">Filter:</span>
+                    <span id="search-term" class="search-term"></span>
+                </div>
+                <ul id="channel-list" class="channel-list" aria-label="Channels"></ul>
+                <div id="channel-empty" class="channel-empty hidden">No channels found.</div>
+            </section>
+        </main>
+
+        <footer class="browser-footer">
+            <span class="hint"><b class="key-red"></b> Reload</span>
+            <span class="hint"><b class="key-green"></b> Settings</span>
+            <span class="hint"><b class="key-yellow"></b> Favorite</span>
+            <span class="hint"><b class="key-blue"></b> Search</span>
+            <span class="hint"><b class="key">OK</b> Play</span>
+        </footer>
+    </div>
+
+    <!-- ===== Player ===== -->
+    <div id="player-screen" class="screen player hidden">
+        <!-- AVPlay renders to this object on real hardware -->
+        <object id="av-player" type="application/avplayer"></object>
+        <!-- HTML5 fallback (dev browser / native-HLS TVs) -->
+        <video id="html5-player" class="html5-player" playsinline></video>
+
+        <div id="player-spinner" class="player-spinner hidden">
+            <div class="spinner"></div>
+            <div id="player-spinner-text" class="spinner-text">Buffering&hellip;</div>
+        </div>
+
+        <!-- On-screen channel info -->
+        <div id="player-osd" class="player-osd hidden">
+            <div class="osd-logo-wrap">
+                <img id="osd-logo" class="osd-logo" alt="">
+            </div>
+            <div class="osd-info">
+                <div class="osd-number" id="osd-number"></div>
+                <div class="osd-name" id="osd-name"></div>
+                <div class="osd-group" id="osd-group"></div>
+                <div class="osd-state" id="osd-state"></div>
+            </div>
+        </div>
+
+        <!-- Number entry (zap to channel) -->
+        <div id="zap-entry" class="zap-entry hidden"></div>
+
+        <!-- Player error -->
+        <div id="player-error" class="player-error hidden">
+            <div class="error-title">Playback error</div>
+            <div id="player-error-msg" class="error-msg"></div>
+            <div class="error-hint">Press <b class="key">Back</b> to return to the channel list.</div>
+        </div>
+    </div>
+
+    <!-- ===== Settings ===== -->
+    <div id="settings" class="screen settings hidden">
+        <h1 class="settings-title">Settings</h1>
+
+        <div class="settings-section">
+            <label class="settings-label">Playlist source (M3U / M3U8 URL)</label>
+            <div id="settings-url" class="settings-field" tabindex="0"></div>
+            <p class="settings-help">Select to edit the playlist URL using the on-screen keyboard.</p>
+        </div>
+
+        <div class="settings-section">
+            <div id="settings-bundled" class="settings-field" tabindex="0">Use bundled sample playlist</div>
+        </div>
+
+        <div class="settings-section">
+            <div id="settings-clear-fav" class="settings-field" tabindex="0">Clear all favorites</div>
+        </div>
+
+        <div class="settings-section settings-about">
+            <div>IPTV for Samsung Tizen &mdash; v<span id="settings-version">1.0.0</span></div>
+            <div id="settings-engine" class="settings-engine"></div>
+        </div>
+
+        <footer class="settings-footer">
+            <span class="hint"><b class="key">Back</b> Save &amp; return</span>
+        </footer>
+    </div>
+
+    <!-- ===== Toast ===== -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- ===== On-screen keyboard for URL entry ===== -->
+    <div id="osk" class="osk hidden">
+        <div class="osk-title">Edit playlist URL</div>
+        <div id="osk-input" class="osk-input"></div>
+        <div id="osk-keys" class="osk-keys"></div>
+    </div>
+
+    <!-- Scripts (load order matters: no bundler) -->
+    <script src="js/keys.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/playlist.js"></script>
+    <script src="js/focus.js"></script>
+    <script src="js/keyboard.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

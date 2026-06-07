@@ -1,0 +1,15 @@
+# Build output
+/build/
+*.wgt
+
+# Tizen Studio
+.buildResult/
+.sign/
+*.tproject
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+node_modules/
+npm-debug.log*

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://mohesk.github.io/iptv/IPTV" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="TizenIPTV1.IPTV" package="TizenIPTV1" required_version="2.4"/>
+    <content src="index.html"/>
+
+    <!-- TV screen profile -->
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+
+    <icon src="icon.png"/>
+    <name>IPTV</name>
+    <description>IPTV player for Samsung Tizen TV that streams channels from an M3U/M3U8 playlist.</description>
+    <author email="mohammad.eskandari@iesve.com">mohesk</author>
+
+    <!-- Privileges required for network streaming -->
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <tizen:privilege name="http://developer.samsung.com/privilege/network.public"/>
+
+    <tizen:profile name="tv"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable"
+                   background-support="disable" encryption="disable" install-location="auto"/>
+
+    <!-- Allow loading streams and logos from any origin -->
+    <access origin="*" subdomains="true"/>
+</widget>
