@@ -167,13 +167,69 @@ var YT = (function () {
             });
     }
 
+    // ---- async wrappers (browser/TV only) ----------------------------------
+
+    function httpGet(url) {
+        if (typeof fetch === 'function') {
+            return fetch(url, { cache: 'no-store' }).then(function (r) {
+                if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                return r.text();
+            });
+        }
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) { return; }
+                if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
+                    resolve(xhr.responseText);
+                } else { reject(new Error('HTTP ' + xhr.status)); }
+            };
+            xhr.onerror = function () { reject(new Error('Network error')); };
+            xhr.send();
+        });
+    }
+
+    // Optional CORS-proxy prefix for dev-browser testing (blank on TV).
+    function proxied(url) {
+        var p = (typeof Store !== 'undefined' && Store.getYtProxy)
+            ? Store.getYtProxy() : '';
+        return p ? (p + encodeURIComponent(url)) : url;
+    }
+
+    function now() { return (Date && Date.now) ? Date.now() : 0; }
+
+    // Load the bundled channel list (same-origin, no proxy).
+    function load() {
+        return httpGet('config/youtube_channels.json').then(function (text) {
+            var list;
+            try { list = JSON.parse(text); }
+            catch (e) { return []; }
+            return buildChannels(list);
+        }).catch(function () { return []; });
+    }
+
+    // Probe one channel's live status. Never rejects: failures -> state:'error'.
+    function probe(channel) {
+        var url = 'https://www.youtube.com/@' + channel.handle + '/live?hl=en';
+        return httpGet(proxied(url)).then(function (html) {
+            var s = parseProbeHtml(html);
+            s.checkedAt = now();
+            return s;
+        }).catch(function () {
+            return { state: 'error', checkedAt: now() };
+        });
+    }
+
     return {
         GROUP: GROUP,
         extractJsonObject: extractJsonObject,
         classify: classify,
         deepFindVideo: deepFindVideo,
         parseProbeHtml: parseProbeHtml,
-        buildChannels: buildChannels
+        buildChannels: buildChannels,
+        load: load,
+        probe: probe
     };
 })();
 
