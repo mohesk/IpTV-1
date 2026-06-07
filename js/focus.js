@@ -59,38 +59,30 @@ ListNav.prototype.select = function () {
     if (el) { this.onSelect(this.index, el); }
 };
 
-// Keep the focused row visible by translating the list content.
+// Keep the focused row visible by scrolling the container. We scroll natively
+// (scrollTop) rather than transforming the container, because the container is
+// also the overflow-clipping box — translating it would just move the clip
+// window, never revealing rows past the fold. scrollTop self-clamps to the
+// scrollable range, and works on overflow:hidden/auto containers.
 ListNav.prototype._scrollTo = function (el) {
     var c = this.container;
     var viewH = c.clientHeight;
-    var rowTop = el.offsetTop;
-    var rowH = el.offsetHeight;
-    var pad = rowH * this.padRows;
+    var pad = el.offsetHeight * this.padRows;
 
-    // Current translate
-    var cur = this._translate || 0;
-    var visTop = rowTop + cur;
-    var visBottom = visTop + rowH;
+    // Row position relative to the viewport's current top edge.
+    var cRect = c.getBoundingClientRect();
+    var eRect = el.getBoundingClientRect();
+    var top = eRect.top - cRect.top;
+    var bottom = eRect.bottom - cRect.top;
 
-    if (visTop < pad) {
-        cur = -(rowTop - pad);
-    } else if (visBottom > viewH - pad) {
-        cur = viewH - pad - (rowTop + rowH);
+    if (top < pad) {
+        c.scrollTop += (top - pad);
+    } else if (bottom > viewH - pad) {
+        c.scrollTop += (bottom - (viewH - pad));
     }
-
-    // Clamp so we never scroll past the content edges.
-    var contentH = c.scrollHeight;
-    var minTranslate = Math.min(0, viewH - contentH);
-    if (cur > 0) { cur = 0; }
-    if (cur < minTranslate) { cur = minTranslate; }
-
-    this._translate = cur;
-    c.style.transition = 'transform 0.15s ease';
-    c.style.transform = 'translateY(' + cur + 'px)';
 };
 
 ListNav.prototype.reset = function () {
-    this._translate = 0;
-    this.container.style.transform = 'translateY(0)';
+    this.container.scrollTop = 0;
     this.index = 0;
 };

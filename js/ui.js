@@ -64,7 +64,7 @@ var UI = (function () {
     function renderGroups(groups) {
         var list = els['group-list'];
         list.innerHTML = '';
-        list.style.transform = 'translateY(0)';
+        list.scrollTop = 0;
         groups.forEach(function (g) {
             var item = document.createElement('div');
             item.className = 'group-item';
@@ -83,7 +83,7 @@ var UI = (function () {
     function renderChannels(channels, playingId, isFav) {
         var list = els['channel-list'];
         list.innerHTML = '';
-        list.style.transform = 'translateY(0)';
+        list.scrollTop = 0;
         els['channel-empty'].classList.toggle('hidden', channels.length > 0);
 
         channels.forEach(function (ch, i) {

@@ -120,11 +120,14 @@ html, body {
 .group-list {
     width: 460px;
     height: 100%;
-    overflow: hidden;
+    overflow-y: auto;
     padding: 20px 0;
     background: var(--bg-elev);
     border-right: 1px solid #222b3b;
 }
+/* Hide the scrollbar (no usable scrollbar on a TV) while keeping scrollTop. */
+.group-list::-webkit-scrollbar,
+.channel-list::-webkit-scrollbar { width: 0; height: 0; }
 .group-item {
     display: flex;
     align-items: center;
@@ -175,7 +178,7 @@ html, body {
     min-width: 200px;
     padding-bottom: 2px;
 }
-.channel-list { list-style: none; height: 100%; overflow: hidden; }
+.channel-list { list-style: none; height: 100%; overflow-y: auto; }
 .channel-item {
     display: flex;
     align-items: center;
