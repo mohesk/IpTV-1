@@ -410,6 +410,24 @@ html, body {
 .osk-key.xwide { grid-column: span 3; }
 .osk-key.focused { background: var(--accent); box-shadow: 0 0 0 3px var(--focus); }
 
+/* YouTube live badge + status subtitle in the channel list. */
+.ch-live {
+    margin-left: 12px;
+    padding: 2px 10px;
+    border-radius: 6px;
+    background: #c00;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    vertical-align: middle;
+}
+.ch-live.hidden { display: none; }
+.ch-sub {
+    margin-top: 4px;
+    font-size: 22px;
+    color: #9aa0a6;
+}
+
 /* YouTube VOD embed fills the player surface like the video element. */
 .yt-embed {
     position: absolute;
