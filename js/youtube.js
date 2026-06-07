@@ -1,0 +1,236 @@
+/* ===========================================================================
+   youtube.js  -  YouTube channel live-detection + metadata extraction.
+
+   Detection is fully client-side: fetch a channel's /live page and read the
+   ytInitialPlayerResponse / ytInitialData JSON the page embeds. No API key.
+
+   The pure parsing helpers (extractJsonObject, classify, deepFindVideo,
+   parseProbeHtml, buildChannels) are exported for unit testing in Node. The
+   async wrappers (load, probe) use fetch/XHR and only run in the app.
+   =========================================================================== */
+var YT = (function () {
+    'use strict';
+
+    // ---- pure helpers -------------------------------------------------------
+
+    // Find the first {...} object after `marker` and JSON.parse it. Uses a
+    // string-aware brace scanner so braces inside JSON strings don't confuse it.
+    function extractJsonObject(html, marker) {
+        if (typeof html !== 'string') { return null; }
+        var idx = html.indexOf(marker);
+        if (idx === -1) { return null; }
+        var start = html.indexOf('{', idx);
+        if (start === -1) { return null; }
+
+        var depth = 0, inStr = false, esc = false;
+        for (var i = start; i < html.length; i++) {
+            var c = html.charAt(i);
+            if (inStr) {
+                if (esc) { esc = false; }
+                else if (c === '\\') { esc = true; }
+                else if (c === '"') { inStr = false; }
+            } else if (c === '"') {
+                inStr = true;
+            } else if (c === '{') {
+                depth++;
+            } else if (c === '}') {
+                depth--;
+                if (depth === 0) {
+                    try { return JSON.parse(html.slice(start, i + 1)); }
+                    catch (e) { return null; }
+                }
+            }
+        }
+        return null;
+    }
+
+    function pickThumb(t) {
+        if (t && t.thumbnails && t.thumbnails.length) {
+            return t.thumbnails[t.thumbnails.length - 1].url;
+        }
+        return '';
+    }
+
+    function thumbFor(id) {
+        return id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : '';
+    }
+
+    // Given a parsed ytInitialPlayerResponse, return a live status or null.
+    function classify(player) {
+        if (!player || !player.streamingData) { return null; }
+        var hls = player.streamingData.hlsManifestUrl;
+        var status = player.playabilityStatus && player.playabilityStatus.status;
+        var vd = player.videoDetails || {};
+        var isLive = vd.isLive === true ||
+                     (vd.isLiveContent === true && status === 'OK' && !!hls);
+        if (hls && status === 'OK' && isLive) {
+            return {
+                state: 'live',
+                hlsUrl: hls,
+                videoId: vd.videoId || '',
+                title: vd.title || '',
+                thumbnail: pickThumb(vd.thumbnail) || thumbFor(vd.videoId)
+            };
+        }
+        return null;
+    }
+
+    // Flatten a YouTube text object ({simpleText} or {runs:[{text}]}) to a string.
+    function textOf(t) {
+        if (!t) { return ''; }
+        if (typeof t === 'string') { return t; }
+        if (t.simpleText !== undefined) { return t.simpleText; }
+        if (t.runs && t.runs.length) {
+            return t.runs.map(function (r) { return r.text || ''; }).join('');
+        }
+        return '';
+    }
+
+    // Depth-first search for the first node that looks like a video
+    // (has a videoId and a title/headline). Returns its id/title/thumb/since.
+    function deepFindVideo(node, guard) {
+        guard = guard || { n: 0 };
+        if (!node || typeof node !== 'object') { return null; }
+        if (guard.n++ > 300000) { return null; } // bound total nodes visited (YouTube JSON is wide, not deep)
+
+        if (node.videoId && (node.title || node.headline)) {
+            return {
+                videoId: node.videoId,
+                title: textOf(node.title || node.headline),
+                thumbnail: pickThumb(node.thumbnail) || thumbFor(node.videoId),
+                sinceText: textOf(node.publishedTimeText)
+            };
+        }
+
+        if (Array.isArray(node)) {
+            for (var i = 0; i < node.length; i++) {
+                var r = deepFindVideo(node[i], guard);
+                if (r) { return r; }
+            }
+        } else {
+            for (var k in node) {
+                if (!Object.prototype.hasOwnProperty.call(node, k)) { continue; }
+                var v = node[k];
+                if (v && typeof v === 'object') {
+                    var r2 = deepFindVideo(v, guard);
+                    if (r2) { return r2; }
+                }
+            }
+        }
+        return null;
+    }
+
+    // Classify a fetched /live page into a status object.
+    function parseProbeHtml(html) {
+        if (typeof html !== 'string' || !html) { return { state: 'error' }; }
+
+        var player = extractJsonObject(html, 'ytInitialPlayerResponse');
+        var live = classify(player);
+        if (live) { return live; }
+
+        var data = extractJsonObject(html, 'ytInitialData');
+        var vid = data ? deepFindVideo(data) : null;
+        if (vid && vid.videoId) {
+            return {
+                state: 'offline',
+                videoId: vid.videoId,
+                title: vid.title,
+                thumbnail: vid.thumbnail,
+                sinceText: vid.sinceText || 'recently'
+            };
+        }
+        return { state: 'error' };
+    }
+
+    var GROUP = '📺 YouTube'; // 📺 YouTube
+
+    // Map the JSON list to channel objects compatible with the app's model.
+    function buildChannels(list) {
+        if (!Array.isArray(list)) { return []; }
+        return list
+            .filter(function (e) { return e && e.handle; })
+            .map(function (e) {
+                var handle = String(e.handle).replace(/^@/, '');
+                return {
+                    id: 'yt:' + handle,
+                    name: e.name || handle,
+                    url: '',
+                    logo: '',
+                    group: GROUP,
+                    type: 'youtube',
+                    handle: handle,
+                    chno: '',
+                    attrs: {},
+                    yt: null,
+                    index: 0
+                };
+            });
+    }
+
+    // ---- async wrappers (browser/TV only) ----------------------------------
+
+    function httpGet(url) {
+        if (typeof fetch === 'function') {
+            return fetch(url, { cache: 'no-store' }).then(function (r) {
+                if (!r.ok) { throw new Error('HTTP ' + r.status); }
+                return r.text();
+            });
+        }
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) { return; }
+                if (xhr.status === 0 || (xhr.status >= 200 && xhr.status < 300)) {
+                    resolve(xhr.responseText);
+                } else { reject(new Error('HTTP ' + xhr.status)); }
+            };
+            xhr.onerror = function () { reject(new Error('Network error')); };
+            xhr.send();
+        });
+    }
+
+    // Optional CORS-proxy prefix for dev-browser testing (blank on TV).
+    function proxied(url) {
+        var p = (typeof Store !== 'undefined' && Store.getYtProxy)
+            ? Store.getYtProxy() : '';
+        return p ? (p + encodeURIComponent(url)) : url;
+    }
+
+    function now() { return (Date && Date.now) ? Date.now() : 0; }
+
+    // Load the bundled channel list (same-origin, no proxy).
+    function load() {
+        return httpGet('config/youtube_channels.json').then(function (text) {
+            var list;
+            try { list = JSON.parse(text); }
+            catch (e) { return []; }
+            return buildChannels(list);
+        }).catch(function () { return []; });
+    }
+
+    // Probe one channel's live status. Never rejects: failures -> state:'error'.
+    function probe(channel) {
+        var url = 'https://www.youtube.com/@' + channel.handle + '/live?hl=en';
+        return httpGet(proxied(url)).then(function (html) {
+            var s = parseProbeHtml(html);
+            s.checkedAt = now();
+            return s;
+        }).catch(function () {
+            return { state: 'error', checkedAt: now() };
+        });
+    }
+
+    return {
+        GROUP: GROUP,
+        extractJsonObject: extractJsonObject,
+        classify: classify,
+        deepFindVideo: deepFindVideo,
+        parseProbeHtml: parseProbeHtml,
+        buildChannels: buildChannels,
+        load: load,
+        probe: probe
+    };
+})();
+
+if (typeof module !== 'undefined' && module.exports) { module.exports = YT; }

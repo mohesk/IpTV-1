@@ -89,6 +89,7 @@ var UI = (function () {
         channels.forEach(function (ch, i) {
             var li = document.createElement('li');
             li.className = 'channel-item';
+            li.setAttribute('data-channel-id', ch.id);
             if (ch.id === playingId) { li.classList.add('playing'); }
 
             var num = document.createElement('div');
@@ -99,7 +100,18 @@ var UI = (function () {
 
             var name = document.createElement('div');
             name.className = 'ch-name';
-            name.textContent = ch.name;
+            var nameText = document.createElement('span');
+            nameText.textContent = ch.name;
+            name.appendChild(nameText);
+            if (ch.type === 'youtube') {
+                var badge = document.createElement('span');
+                badge.className = 'ch-live hidden';
+                name.appendChild(badge);
+                var sub = document.createElement('div');
+                sub.className = 'ch-sub';
+                sub.textContent = 'Checking…';
+                name.appendChild(sub);
+            }
 
             var fav = document.createElement('div');
             fav.className = 'ch-fav';
@@ -202,6 +214,41 @@ var UI = (function () {
         els['settings-version'].textContent = version;
     }
 
+    // Update a YouTube channel row in place with its probe status.
+    function setYtStatus(channelId, status) {
+        var list = els['channel-list'];
+        var li = list.querySelector('[data-channel-id="' + channelId + '"]');
+        if (!li) { return; }
+        var badge = li.querySelector('.ch-live');
+        var sub = li.querySelector('.ch-sub');
+        if (!sub) { return; }
+
+        if (status.state === 'live') {
+            if (badge) { badge.textContent = '● LIVE'; badge.classList.remove('hidden'); }
+            sub.textContent = 'Live now';
+        } else if (status.state === 'offline') {
+            if (badge) { badge.classList.add('hidden'); }
+            sub.textContent = 'Last streamed ' + (status.sinceText || 'recently');
+            if (status.thumbnail) {
+                var wrap = li.querySelector('.ch-logo-wrap');
+                if (wrap) {
+                    wrap.innerHTML = '';
+                    var img = document.createElement('img');
+                    img.className = 'ch-logo';
+                    img.alt = '';
+                    img.src = status.thumbnail;
+                    wrap.appendChild(img);
+                }
+            }
+        } else if (status.state === 'checking') {
+            if (badge) { badge.classList.add('hidden'); }
+            sub.textContent = 'Checking…';
+        } else {
+            if (badge) { badge.classList.add('hidden'); }
+            sub.textContent = 'Status unavailable';
+        }
+    }
+
     return {
         cache: cache,
         show: show,
@@ -222,6 +269,7 @@ var UI = (function () {
         setSplashStatus: setSplashStatus,
         startClock: startClock,
         setSettingsInfo: setSettingsInfo,
+        setYtStatus: setYtStatus,
         els: els
     };
 })();

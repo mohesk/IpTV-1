@@ -26,7 +26,9 @@
         zap: '',
         zapTimer: null,
         osdTimer: null,
-        settingsIndex: 0
+        settingsIndex: 0,
+        ytRefreshTimer: null,    // periodic re-probe while the YT group is open
+        ytConcurrency: 4         // max parallel probes
     };
 
     var groupNav, channelNav;
@@ -52,6 +54,7 @@
 
     /* ============================================================ playlist */
     function loadPlaylist(url, initial) {
+        stopYtProbing();
         state.mode = 'splash';
         UI.show('splash');
         UI.setSplashStatus('Loading playlist…');
@@ -61,6 +64,13 @@
             rebuildGroups();
             enterBrowser();
             if (initial) { tryResumeLast(); }
+            // Append YouTube channels asynchronously; failure is non-fatal.
+            YT.load().then(function (yt) {
+                if (yt && yt.length) {
+                    state.channels = state.channels.concat(yt);
+                    rebuildGroups();
+                }
+            });
         }).catch(function (err) {
             UI.setSplashStatus('Failed to load playlist: ' + err.message);
             // Offer settings after a moment so the user can fix the URL.
@@ -98,6 +108,8 @@
         state.search = '';
         UI.setSearch('');
         state.viewChannels = group.channels;
+        if (group.name === YT.GROUP) { startYtProbing(group.channels); }
+        else { stopYtProbing(); }
         UI.setChannelCount(group.channels.length);
         UI.renderChannels(group.channels, state.playingId, Store.isFavorite);
         channelNav.reset();
@@ -123,12 +135,51 @@
         }
     }
 
+    /* ============================================================ youtube */
+    function startYtProbing(channels) {
+        stopYtProbing();
+        channels.forEach(function (ch) {
+            if (ch.type === 'youtube') { UI.setYtStatus(ch.id, { state: 'checking' }); }
+        });
+        runYtProbes(channels);
+        state.ytRefreshTimer = setInterval(function () {
+            runYtProbes(channels);
+        }, 180000); // refresh every 3 minutes
+    }
+
+    function stopYtProbing() {
+        if (state.ytRefreshTimer) {
+            clearInterval(state.ytRefreshTimer);
+            state.ytRefreshTimer = null;
+        }
+    }
+
+    // Probe a list of YouTube channels with a small concurrency cap, updating
+    // each row as it resolves.
+    function runYtProbes(channels) {
+        var queue = channels.filter(function (ch) { return ch.type === 'youtube'; });
+        var i = 0;
+        function next() {
+            if (i >= queue.length) { return; }
+            var ch = queue[i++];
+            YT.probe(ch).then(function (status) {
+                ch.yt = status;
+                // Only paint if we're still in the browser view.
+                if (state.mode === 'browser') { UI.setYtStatus(ch.id, status); }
+                next();
+            });
+        }
+        var lanes = Math.min(state.ytConcurrency, queue.length);
+        for (var L = 0; L < lanes; L++) { next(); }
+    }
+
     function onChannelSelect(index) {
         var ch = state.viewChannels[index];
         if (!ch) { return; }
         state.playList = state.viewChannels.slice();
         state.playIndex = index;
-        startPlayback(ch);
+        if (ch.type === 'youtube') { playYouTube(ch); }
+        else { startPlayback(ch); }
     }
 
     function toggleFavoriteFocused() {
@@ -203,6 +254,38 @@
         });
     }
 
+    function playYouTube(channel) {
+        stopYtProbing();
+        state.mode = 'player';
+        state.playingId = channel.id;
+        Store.setLastChannel(channel.id);
+        UI.show('player-screen');
+        UI.hidePlayerError();
+        UI.showSpinner(true, 'Checking live status…');
+        UI.showOsd(channel, state.playIndex, 'Checking…');
+        clearOsdHide();
+
+        YT.probe(channel).then(function (status) {
+            channel.yt = status;
+            if (status.state === 'live') {
+                channel.url = status.hlsUrl;
+                UI.setOsdState('● LIVE');
+                Player.play(channel, currentPlayHandlers());
+            } else if (status.state === 'offline') {
+                UI.showOsd(channel, state.playIndex,
+                    'Offline · last streamed ' + (status.sinceText || 'recently'));
+                scheduleOsdHide();
+                Player.playEmbed(status.videoId, {
+                    onError: function (msg) { UI.showSpinner(false); UI.showPlayerError(msg); },
+                    onPlaying: function () { UI.showSpinner(false); }
+                });
+            } else {
+                UI.showSpinner(false);
+                UI.showPlayerError('This channel is offline and no recent video was found.');
+            }
+        });
+    }
+
     function switchChannel(delta) {
         if (!state.playList.length) { return; }
         var n = state.playList.length;
@@ -216,6 +299,7 @@
         state.playingId = ch.id;
         Store.setLastChannel(ch.id);
         UI.hidePlayerError();
+        if (ch.type === 'youtube') { playYouTube(ch); return; }
         UI.showOsd(ch, state.playIndex, 'Loading…');
         UI.showSpinner(true, 'Connecting…');
         scheduleOsdHide();
@@ -239,6 +323,7 @@
     }
 
     function stopPlayback() {
+        stopYtProbing();
         Player.stop();
         UI.hideOsd();
         UI.hidePlayerError();
@@ -300,6 +385,7 @@
 
     /* ============================================================ settings */
     function openSettings() {
+        stopYtProbing();
         state.mode = 'settings';
         state.settingsIndex = 0;
         UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
