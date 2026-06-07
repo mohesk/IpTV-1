@@ -21,6 +21,7 @@ var Player = (function () {
     var engine = null;         // 'avplay' | 'html5'
     var avObj = null;          // <object> for AVPlay
     var video = null;          // <video> fallback
+    var ytFrame = null;        // <iframe> for YouTube VOD embeds
     var handlers = {};
     var current = null;
     var paused = false;
@@ -34,6 +35,7 @@ var Player = (function () {
     function init() {
         avObj = document.getElementById('av-player');
         video = document.getElementById('html5-player');
+        ytFrame = document.getElementById('yt-embed');
         engine = hasAvplay() ? 'avplay' : 'html5';
 
         if (engine === 'avplay') {
@@ -157,16 +159,43 @@ var Player = (function () {
         return paused ? 'paused' : 'playing';
     }
 
+    /* -------------------------------------------------------- YouTube embed */
+    function hideEmbed() {
+        if (!ytFrame) { return; }
+        ytFrame.classList.add('hidden');
+        try { ytFrame.src = 'about:blank'; } catch (e) {}
+    }
+
+    function playEmbed(videoId) {
+        // Stop any AVPlay/HTML5 playback and surface the iframe.
+        if (engine === 'avplay') { avplayStop(); }
+        else { try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {} }
+        if (avObj) { avObj.style.display = 'none'; }
+        if (video) { video.style.display = 'none'; }
+        if (!ytFrame) { fire('onError', 'Embedded player unavailable.'); return; }
+
+        ytFrame.classList.remove('hidden');
+        ytFrame.onerror = function () { fire('onError', 'Could not load the video.'); };
+        ytFrame.src = 'https://www.youtube.com/embed/' + videoId +
+                      '?autoplay=1&playsinline=1&rel=0';
+        paused = false;
+        fire('onPlaying');
+    }
+
     /* ----------------------------------------------------------------- public */
     function play(channel, h) {
         handlers = h || {};
         current = channel;
         paused = false;
+        hideEmbed();
+        if (engine === 'avplay') { if (avObj) { avObj.style.display = 'block'; } }
+        else if (video) { video.style.display = 'block'; }
         if (engine === 'avplay') { avplayPlay(channel); }
         else { html5Play(channel); }
     }
 
     function stop() {
+        hideEmbed();
         if (engine === 'avplay') {
             avplayStop();
         } else {
@@ -189,6 +218,7 @@ var Player = (function () {
         stop: stop,
         togglePause: togglePause,
         isPaused: isPaused,
-        getEngineName: getEngineName
+        getEngineName: getEngineName,
+        playEmbed: playEmbed
     };
 })();

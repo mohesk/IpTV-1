@@ -409,3 +409,15 @@ html, body {
 .osk-key.wide { grid-column: span 2; }
 .osk-key.xwide { grid-column: span 3; }
 .osk-key.focused { background: var(--accent); box-shadow: 0 0 0 3px var(--focus); }
+
+/* YouTube VOD embed fills the player surface like the video element. */
+.yt-embed {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1920px;
+    height: 1080px;
+    border: 0;
+    background: #000;
+    z-index: 1;
+}
+.yt-embed.hidden { display: none; }
