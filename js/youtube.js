@@ -44,8 +44,40 @@ var YT = (function () {
         return null;
     }
 
+    function pickThumb(t) {
+        if (t && t.thumbnails && t.thumbnails.length) {
+            return t.thumbnails[t.thumbnails.length - 1].url;
+        }
+        return '';
+    }
+
+    function thumbFor(id) {
+        return id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : '';
+    }
+
+    // Given a parsed ytInitialPlayerResponse, return a live status or null.
+    function classify(player) {
+        if (!player || !player.streamingData) { return null; }
+        var hls = player.streamingData.hlsManifestUrl;
+        var status = player.playabilityStatus && player.playabilityStatus.status;
+        var vd = player.videoDetails || {};
+        var isLive = vd.isLive === true ||
+                     (vd.isLiveContent === true && status === 'OK' && !!hls);
+        if (hls && status === 'OK' && isLive) {
+            return {
+                state: 'live',
+                hlsUrl: hls,
+                videoId: vd.videoId || '',
+                title: vd.title || '',
+                thumbnail: pickThumb(vd.thumbnail) || thumbFor(vd.videoId)
+            };
+        }
+        return null;
+    }
+
     return {
-        extractJsonObject: extractJsonObject
+        extractJsonObject: extractJsonObject,
+        classify: classify
     };
 })();
 

@@ -32,3 +32,24 @@ test('extractJsonObject with ytInitialData marker returns second object from OFF
   assert.ok(obj.contents, 'should have contents');
   assert.strictEqual(obj.contents.section.items[0].videoRenderer.videoId, 'PASTvid456');
 });
+
+test('classify returns a live status for a live player response', () => {
+  const player = YT.extractJsonObject(LIVE_HTML, 'ytInitialPlayerResponse');
+  const s = YT.classify(player);
+  assert.ok(s);
+  assert.strictEqual(s.state, 'live');
+  assert.strictEqual(s.hlsUrl, 'https://manifest.googlevideo.com/api/live/abc.m3u8');
+  assert.strictEqual(s.videoId, 'LIVEvid123');
+  assert.strictEqual(s.title, 'Tonight Live Show');
+  assert.strictEqual(s.thumbnail, 'https://i.ytimg.com/vi/LIVEvid123/hqdefault.jpg');
+});
+
+test('classify returns null when the stream is offline', () => {
+  const player = YT.extractJsonObject(OFFLINE_HTML, 'ytInitialPlayerResponse');
+  assert.strictEqual(YT.classify(player), null);
+});
+
+test('classify returns null on missing input', () => {
+  assert.strictEqual(YT.classify(null), null);
+  assert.strictEqual(YT.classify({}), null);
+});
