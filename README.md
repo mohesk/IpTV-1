@@ -19,6 +19,10 @@ web app — no frameworks, no bundler — so it stays fast and easy to package.
   **zapping**, channel up/down, play/pause/stop, and the four colour keys.
 - **Favorites** — mark channels with the yellow key; a Favorites category is
   added automatically (persisted in `localStorage`).
+- **YouTube live channels** — a `📺 YouTube` category checks listed channels for
+  live status (client-side, no API key); live channels play directly, offline
+  ones show their latest video and when it last streamed. Edit the list in
+  `config/youtube_channels.json`.
 - **Search** — filter channels by name/group via an on-screen keyboard.
 - **Settings** — change the playlist URL with the on-screen keyboard, switch
   to the bundled sample, or clear favorites. Settings persist across launches.
@@ -53,9 +57,11 @@ js/
   focus.js                 D-pad list navigation with auto-scroll
   keyboard.js              On-screen keyboard for URL / search entry
   player.js                AVPlay + HTML5 video playback abstraction
+  youtube.js               YouTube live detection + metadata extraction
   ui.js                    DOM rendering (groups, channels, OSD, toasts)
   app.js                   Controller / state machine + key router
 config/playlist.example.m3u  Bundled sample playlist (public test streams)
+config/youtube_channels.json YouTube channels checked for live status
 scripts/
   dev-server.js            Static server for browser testing
   build-wgt.sh             Package an (unsigned) .wgt archive
