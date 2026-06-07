@@ -33,7 +33,8 @@
         osdTimer: null,
         settingsIndex: 0,
         ytRefreshTimer: null,    // periodic re-probe while the YT group is open
-        ytConcurrency: 1         // probe serially — bursts trip the API rate limit
+        ytConcurrency: 1,        // probe serially — bursts trip the API rate limit
+        ytEmbedActive: false     // true while a YouTube iframe is the active player
     };
 
     var groupNav, channelNav;
@@ -273,6 +274,7 @@
     /* ============================================================ playback */
     function startPlayback(channel) {
         state.mode = 'player';
+        state.ytEmbedActive = false;   // native player; Back comes via keydown
         state.playingId = channel.id;
         Store.setLastChannel(channel.id);
         UI.show('player-screen');
@@ -317,13 +319,16 @@
             channel.yt = status;
             if (status.state === 'live') {
                 UI.setOsdState('● LIVE');
+                state.ytEmbedActive = true;   // iframe will own focus; route Back via tizenhwkey
                 Player.playEmbed(ytEmbedUrl(status.videoId), ytEmbedHandlers());
             } else if (status.state === 'offline') {
                 UI.showOsd(channel, state.playIndex,
                     'Offline · last streamed ' + (status.sinceText || 'recently'));
                 scheduleOsdHide();
+                state.ytEmbedActive = true;
                 Player.playEmbed(ytEmbedUrl(status.videoId), ytEmbedHandlers());
             } else {
+                state.ytEmbedActive = false;
                 UI.showSpinner(false);
                 UI.showPlayerError(ytErrorMessage(status.reason));
             }
@@ -372,6 +377,7 @@
 
     function stopPlayback() {
         stopYtProbing();
+        state.ytEmbedActive = false;
         Player.stop();
         UI.hideOsd();
         UI.hidePlayerError();
@@ -609,15 +615,11 @@
         }
     }
 
-    // Centralised Back handling. Reached from keydown (works when the app has
-    // focus) AND from the Tizen hardware-key event (works even when a focused
-    // cross-origin iframe — the YouTube embed — swallows keydown). A short guard
-    // de-dupes the two events when the platform fires both for one press.
-    var lastBackAt = 0;
+    // Centralised Back handling. Reached from keydown (when the app has focus)
+    // and, only while the YouTube embed is showing, from the Tizen hardware-key
+    // event. The two sources are mutually exclusive (see onHwKey) so Back is
+    // never handled twice for one press.
     function handleBack() {
-        var t = (Date && Date.now) ? Date.now() : 0;
-        if (t && t - lastBackAt < 250) { return; }
-        lastBackAt = t;
         if (OSK.isOpen()) { return; }   // the OSK handles its own Back via keydown
         switch (state.mode) {
             case 'player':   stopPlayback(); break;
@@ -627,12 +629,14 @@
         }
     }
 
-    // Tizen dispatches this for the hardware Back/Return key regardless of which
-    // element (including an iframe) has DOM focus.
+    // Tizen dispatches this for the hardware Back/Return key even when a focused
+    // cross-origin iframe (the YouTube embed) swallows keydown. We only act on it
+    // in that embed case; otherwise normal keydown Back handling applies, so a
+    // single press isn't handled by both paths (which previously caused an exit).
     function onHwKey(e) {
         if (e && e.keyName === 'back') {
             if (typeof e.preventDefault === 'function') { e.preventDefault(); }
-            handleBack();
+            if (state.ytEmbedActive) { handleBack(); }
         }
     }
 
