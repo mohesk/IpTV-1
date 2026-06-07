@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>YouTube Player</title>
+    <!--
+      Referrer-bounce page for the Tizen IPTV app.
+
+      The TV app runs from a file:// origin, so a YouTube embed loaded there has
+      no referrer and fails with "Error 153 / player configuration error". This
+      page is served over HTTPS (e.g. GitHub Pages), so the YouTube embed it
+      hosts sends a valid https referrer and plays normally.
+
+      Host this file on any https origin and point the app's
+      "YouTube player page URL" setting at it, then open with ?v=<videoId>.
+        e.g. https://<user>.github.io/<repo>/player.html?v=dQw4w9WgXcQ
+    -->
+    <style>
+        html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+        #frame { border: 0; width: 100vw; height: 100vh; display: block; }
+        #msg { color: #fff; font-family: sans-serif; font-size: 4vw; padding: 6vw; }
+    </style>
+</head>
+<body>
+    <script>
+        (function () {
+            'use strict';
+            function param(name) {
+                var m = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+                return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : '';
+            }
+            var v = param('v');
+            if (!/^[A-Za-z0-9_-]{6,20}$/.test(v)) {
+                document.body.innerHTML = '<p id="msg">No valid video id. Open with ?v=&lt;videoId&gt;.</p>';
+                return;
+            }
+            var f = document.createElement('iframe');
+            f.id = 'frame';
+            f.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+            f.setAttribute('allowfullscreen', '');
+            f.referrerPolicy = 'strict-origin-when-cross-origin';
+            f.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) +
+                    '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
+            document.body.appendChild(f);
+        })();
+    </script>
+</body>
+</html>

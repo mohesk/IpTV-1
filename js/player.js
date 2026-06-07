@@ -166,7 +166,10 @@ var Player = (function () {
         try { ytFrame.src = 'about:blank'; } catch (e) {}
     }
 
-    function playEmbed(videoId, h) {
+    // Show the YouTube embed at the given URL. The caller supplies the full URL
+    // (normally a self-hosted https "referrer-bounce" page) because YouTube
+    // returns "Error 153" when an embed loads from the app's file:// origin.
+    function playEmbed(url, h) {
         handlers = h || {};
         // Stop any AVPlay/HTML5 playback and surface the iframe.
         if (engine === 'avplay') { avplayStop(); }
@@ -177,12 +180,8 @@ var Player = (function () {
 
         ytFrame.classList.remove('hidden');
         ytFrame.onerror = function () { fire('onError', 'Could not load the video.'); };
-        // A referrer is required or YouTube returns "Error 153". Set it on the
-        // element too (not just the HTML attribute) before navigating, and use
-        // the privacy-enhanced nocookie host which is more embed-permissive.
         try { ytFrame.referrerPolicy = 'strict-origin-when-cross-origin'; } catch (e) {}
-        ytFrame.src = 'https://www.youtube-nocookie.com/embed/' + videoId +
-                      '?autoplay=1&playsinline=1&rel=0';
+        ytFrame.src = url;
         paused = false;
         fire('onPlaying');
     }

@@ -11,7 +11,8 @@ var Store = (function () {
     var KEY_LAST     = 'iptv.lastChannel';
     var KEY_YTPROXY  = 'iptv.ytProxy';
     var KEY_YTKEY    = 'iptv.ytApiKey';
-    var DEFAULT_URL  = 'config/my_playlist.working2.m3u8';
+    var KEY_YTPLAYER = 'iptv.ytPlayerUrl';
+    var DEFAULT_URL  = 'config/movies.m3u8';
 
     var mem = {};
     var backend;
@@ -60,6 +61,9 @@ var Store = (function () {
     function getYtApiKey() { var v = get(KEY_YTKEY); return (v && v.trim()) ? v.trim() : ''; }
     function setYtApiKey(v) { set(KEY_YTKEY, (v || '').trim()); }
 
+    function getYtPlayerUrl() { var v = get(KEY_YTPLAYER); return (v && v.trim()) ? v.trim() : ''; }
+    function setYtPlayerUrl(v) { set(KEY_YTPLAYER, (v || '').trim()); }
+
     return {
         DEFAULT_URL: DEFAULT_URL,
         getPlaylistUrl: getPlaylistUrl,
@@ -73,6 +77,8 @@ var Store = (function () {
         getYtProxy: getYtProxy,
         setYtProxy: setYtProxy,
         getYtApiKey: getYtApiKey,
-        setYtApiKey: setYtApiKey
+        setYtApiKey: setYtApiKey,
+        getYtPlayerUrl: getYtPlayerUrl,
+        setYtPlayerUrl: setYtPlayerUrl
     };
 })();

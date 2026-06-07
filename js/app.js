@@ -187,6 +187,19 @@
         };
     }
 
+    // Build the embed URL. Prefer a self-hosted https "referrer-bounce" page
+    // (required on the TV — a direct embed from file:// fails with Error 153).
+    // With no page configured, fall back to a direct embed (works only in a
+    // desktop dev browser).
+    function ytEmbedUrl(videoId) {
+        var base = Store.getYtPlayerUrl();
+        if (base) {
+            return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'v=' + encodeURIComponent(videoId);
+        }
+        return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(videoId) +
+               '?autoplay=1&playsinline=1&rel=0';
+    }
+
     function ytErrorMessage(reason) {
         if (reason === 'no-key') {
             return 'Add a YouTube Data API key in Settings (green key) to enable YouTube channels.';
@@ -298,12 +311,12 @@
             channel.yt = status;
             if (status.state === 'live') {
                 UI.setOsdState('● LIVE');
-                Player.playEmbed(status.videoId, ytEmbedHandlers());
+                Player.playEmbed(ytEmbedUrl(status.videoId), ytEmbedHandlers());
             } else if (status.state === 'offline') {
                 UI.showOsd(channel, state.playIndex,
                     'Offline · last streamed ' + (status.sinceText || 'recently'));
                 scheduleOsdHide();
-                Player.playEmbed(status.videoId, ytEmbedHandlers());
+                Player.playEmbed(ytEmbedUrl(status.videoId), ytEmbedHandlers());
             } else {
                 UI.showSpinner(false);
                 UI.showPlayerError(ytErrorMessage(status.reason));
@@ -426,11 +439,13 @@
             UI.els['settings-url'],
             document.getElementById('settings-bundled'),
             document.getElementById('settings-clear-fav'),
-            document.getElementById('settings-ytkey')
+            document.getElementById('settings-ytkey'),
+            document.getElementById('settings-ytplayer')
         ];
     }
     function refreshSettingsInfo() {
-        UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION, Store.getYtApiKey());
+        UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION,
+                           Store.getYtApiKey(), Store.getYtPlayerUrl());
     }
     function focusSettings(i) {
         var fields = settingsFields();
@@ -464,6 +479,14 @@
                     Store.setYtApiKey(text);
                     refreshSettingsInfo();
                     UI.toast('YouTube API key saved');
+                });
+                break;
+            case 4: // YouTube player page URL
+                OSK.open(Store.getYtPlayerUrl(), function (text) {
+                    if (text === null) { return; }
+                    Store.setYtPlayerUrl(text);
+                    refreshSettingsInfo();
+                    UI.toast('YouTube player URL saved');
                 });
                 break;
         }

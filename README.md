@@ -101,18 +101,30 @@ CORS and consent redirects).
 1. **Get a free API key:** in the
    [Google Cloud Console](https://console.cloud.google.com/), create a project,
    enable **"YouTube Data API v3"**, then create an **API key** under
-   *APIs & Services → Credentials*.
-2. **Enter it in the app:** press **green** (Settings), select
-   **YouTube Data API key**, and type the key with the on-screen keyboard.
+   *APIs & Services → Credentials*. Enter it via **green** (Settings) →
+   **YouTube Data API key**.
+2. **Host the player page** (required for playback on the TV). The TV app runs
+   from a `file://` origin, where a YouTube embed fails with *"Error 153"*
+   (no referrer). To fix this, the bundled [`player.html`](player.html) must be
+   served over **https** so the embed gets a valid referrer:
+   - Enable **GitHub Pages** for this repo (Settings → Pages → deploy from the
+     default branch), which publishes `player.html` at
+     `https://<user>.github.io/<repo>/player.html`.
+   - In the app: **green** (Settings) → **YouTube player page URL**, and enter
+     that URL. The app opens it as `…/player.html?v=<videoId>`.
+   - (Any https host works — Netlify, your own domain, etc. — just point the
+     setting at wherever `player.html` lives.)
 3. **Edit the channel list** in `config/youtube_channels.json` — each entry is
    `{ "handle", "name", "channelId" }`. The `channelId` (a `UC…` string) is what
    the API uses; find it on the channel's page or via the API.
 
 Notes:
-- Live/offline channels both play through an embedded YouTube player.
+- Live and offline channels both play through the embedded YouTube player.
 - The API has a daily quota (10,000 units; each live check is ~100 units), so
   the app checks on opening the category and caches results for a few minutes
   rather than polling continuously.
+- Remote control inside the YouTube embed is limited (it's a cross-origin
+  frame); use **Back** to return to the channel list.
 
 ## Build & install on a TV
 
