@@ -14,8 +14,8 @@ var UI = (function () {
             'player-spinner', 'player-spinner-text', 'player-osd', 'osd-logo',
             'osd-number', 'osd-name', 'osd-group', 'osd-state', 'zap-entry',
             'player-error', 'player-error-msg', 'settings', 'settings-url',
-            'settings-engine', 'settings-version', 'toast', 'channel-search',
-            'search-term'
+            'settings-engine', 'settings-version', 'settings-ytkey', 'toast',
+            'channel-search', 'search-term'
         ].forEach(function (id) {
             els[id] = document.getElementById(id);
         });
@@ -208,10 +208,17 @@ var UI = (function () {
         setInterval(tick, 15000);
     }
 
-    function setSettingsInfo(url, engineName, version) {
+    function maskKey(key) {
+        if (!key) { return '(not set — select to enter)'; }
+        if (key.length <= 10) { return '•••• (set)'; }
+        return key.slice(0, 6) + '…' + key.slice(-4);
+    }
+
+    function setSettingsInfo(url, engineName, version, ytKey) {
         els['settings-url'].textContent = url;
         els['settings-engine'].textContent = 'Playback engine: ' + engineName;
         els['settings-version'].textContent = version;
+        if (els['settings-ytkey']) { els['settings-ytkey'].textContent = maskKey(ytKey); }
     }
 
     // Update a YouTube channel row in place with its probe status.
@@ -245,7 +252,9 @@ var UI = (function () {
             sub.textContent = 'Checking…';
         } else {
             if (badge) { badge.classList.add('hidden'); }
-            sub.textContent = 'Status unavailable';
+            if (status.reason === 'no-key') { sub.textContent = 'Set API key in Settings'; }
+            else if (status.reason === 'quotaExceeded') { sub.textContent = 'API quota reached'; }
+            else { sub.textContent = 'Status unavailable'; }
         }
     }
 

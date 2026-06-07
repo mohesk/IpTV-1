@@ -1,8 +1,23 @@
 # YouTube Live Channels — Design
 
 **Date:** 2026-06-07
-**Status:** Approved (pending spec review)
+**Status:** Implemented, then revised (see Addendum)
 **Component:** Tizen IPTV web app (`js/`, `config/`, `index.html`, `css/`)
+
+> **Addendum (2026-06-07): data source changed from scraping to the YouTube Data API.**
+> The original design detected live status by fetching each channel's `/live`
+> page and scraping `ytInitialPlayerResponse`. On real TV hardware this fails
+> for **every** channel: a browser context sends an `Origin` header, and
+> youtube.com returns **no `Access-Control-Allow-Origin`** (body unreadable) and
+> **302-redirects to a consent wall**. The implementation now uses the
+> **YouTube Data API v3** (`search.list`), which is browser-callable (returns
+> CORS headers, no consent wall) with a user-supplied API key stored in
+> Settings. Channel IDs are baked into `config/youtube_channels.json`. Both live
+> and offline videos play via the YouTube IFrame embed (an HLS URL is no longer
+> available without scraping). Live detection = `search?eventType=live`; latest
+> video (offline) = `search?order=date`. Quota-aware: probe on category open +
+> selection, cached ~5 min, no continuous polling. The sections below describe
+> the original (superseded) scraping approach.
 
 ## Summary
 

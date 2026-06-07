@@ -20,9 +20,10 @@ web app — no frameworks, no bundler — so it stays fast and easy to package.
 - **Favorites** — mark channels with the yellow key; a Favorites category is
   added automatically (persisted in `localStorage`).
 - **YouTube live channels** — a `📺 YouTube` category checks listed channels for
-  live status (client-side, no API key); live channels play directly, offline
-  ones show their latest video and when it last streamed. Edit the list in
-  `config/youtube_channels.json`.
+  live status via the **YouTube Data API v3**; live channels play in an embedded
+  player, offline ones show their latest video and when it last streamed. Edit
+  the list in `config/youtube_channels.json` and enter a free API key in
+  **Settings** (see *YouTube channels* below).
 - **Search** — filter channels by name/group via an on-screen keyboard.
 - **Settings** — change the playlist URL with the on-screen keyboard, switch
   to the bundled sample, or clear favorites. Settings persist across launches.
@@ -89,6 +90,29 @@ npm run dev          # serves on http://localhost:8080
 3. Press **Back** to save and reload.
 
 The URL is remembered between launches.
+
+## YouTube channels
+
+The `📺 YouTube` category checks each listed channel for a live broadcast and,
+when offline, shows its latest video. Detection uses the **YouTube Data API v3**
+(the only reliable way from a TV browser — scraping youtube.com is blocked by
+CORS and consent redirects).
+
+1. **Get a free API key:** in the
+   [Google Cloud Console](https://console.cloud.google.com/), create a project,
+   enable **"YouTube Data API v3"**, then create an **API key** under
+   *APIs & Services → Credentials*.
+2. **Enter it in the app:** press **green** (Settings), select
+   **YouTube Data API key**, and type the key with the on-screen keyboard.
+3. **Edit the channel list** in `config/youtube_channels.json` — each entry is
+   `{ "handle", "name", "channelId" }`. The `channelId` (a `UC…` string) is what
+   the API uses; find it on the channel's page or via the API.
+
+Notes:
+- Live/offline channels both play through an embedded YouTube player.
+- The API has a daily quota (10,000 units; each live check is ~100 units), so
+  the app checks on opening the category and caches results for a few minutes
+  rather than polling continuously.
 
 ## Build & install on a TV
 

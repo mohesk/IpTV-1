@@ -12,6 +12,7 @@
     var VERSION = '1.0.0';
     var OSD_TIMEOUT = 4500;
     var ZAP_TIMEOUT = 1500;
+    var YT_TTL = 300000;          // reuse a YouTube probe result for 5 min (saves API quota)
 
     var state = {
         mode: 'splash',          // splash | browser | player | settings
@@ -136,15 +137,16 @@
     }
 
     /* ============================================================ youtube */
+    // A cached probe result is reused while fresh (the Data API charges quota
+    // per call, so we don't re-check on every category visit).
+    function ytFresh(ch) {
+        return ch.yt && ch.yt.state !== 'checking' && ch.yt.videoId &&
+               ch.yt.checkedAt && (Date.now() - ch.yt.checkedAt) < YT_TTL;
+    }
+
     function startYtProbing(channels) {
         stopYtProbing();
-        channels.forEach(function (ch) {
-            if (ch.type === 'youtube') { UI.setYtStatus(ch.id, { state: 'checking' }); }
-        });
         runYtProbes(channels);
-        state.ytRefreshTimer = setInterval(function () {
-            runYtProbes(channels);
-        }, 180000); // refresh every 3 minutes
     }
 
     function stopYtProbing() {
@@ -154,10 +156,15 @@
         }
     }
 
-    // Probe a list of YouTube channels with a small concurrency cap, updating
-    // each row as it resolves.
+    // Paint cached statuses immediately; probe only the stale/unknown channels,
+    // with a small concurrency cap, updating each row as it resolves.
     function runYtProbes(channels) {
-        var queue = channels.filter(function (ch) { return ch.type === 'youtube'; });
+        var queue = [];
+        channels.forEach(function (ch) {
+            if (ch.type !== 'youtube') { return; }
+            if (ytFresh(ch)) { UI.setYtStatus(ch.id, ch.yt); }
+            else { UI.setYtStatus(ch.id, { state: 'checking' }); queue.push(ch); }
+        });
         var i = 0;
         function next() {
             if (i >= queue.length) { return; }
@@ -171,6 +178,28 @@
         }
         var lanes = Math.min(state.ytConcurrency, queue.length);
         for (var L = 0; L < lanes; L++) { next(); }
+    }
+
+    function ytEmbedHandlers() {
+        return {
+            onError: function (msg) { UI.showSpinner(false); UI.showPlayerError(msg); },
+            onPlaying: function () { UI.showSpinner(false); }
+        };
+    }
+
+    function ytErrorMessage(reason) {
+        if (reason === 'no-key') {
+            return 'Add a YouTube Data API key in Settings (green key) to enable YouTube channels.';
+        }
+        if (reason === 'quotaExceeded') {
+            return 'YouTube API daily quota reached. Try again later.';
+        }
+        if (reason === 'keyInvalid' || reason === 'badRequest') {
+            return 'The YouTube API key is invalid. Check it in Settings.';
+        }
+        if (reason === 'no-channel-id') { return 'This channel has no channel ID configured.'; }
+        if (reason === 'no-video') { return 'This channel has no videos available.'; }
+        return 'Could not reach YouTube (' + (reason || 'network') + ').';
     }
 
     function onChannelSelect(index) {
@@ -261,29 +290,29 @@
         Store.setLastChannel(channel.id);
         UI.show('player-screen');
         UI.hidePlayerError();
-        UI.showSpinner(true, 'Checking live status…');
+        UI.showSpinner(true, 'Checking…');
         UI.showOsd(channel, state.playIndex, 'Checking…');
         clearOsdHide();
 
-        YT.probe(channel).then(function (status) {
+        function present(status) {
             channel.yt = status;
             if (status.state === 'live') {
-                channel.url = status.hlsUrl;
                 UI.setOsdState('● LIVE');
-                Player.play(channel, currentPlayHandlers());
+                Player.playEmbed(status.videoId, ytEmbedHandlers());
             } else if (status.state === 'offline') {
                 UI.showOsd(channel, state.playIndex,
                     'Offline · last streamed ' + (status.sinceText || 'recently'));
                 scheduleOsdHide();
-                Player.playEmbed(status.videoId, {
-                    onError: function (msg) { UI.showSpinner(false); UI.showPlayerError(msg); },
-                    onPlaying: function () { UI.showSpinner(false); }
-                });
+                Player.playEmbed(status.videoId, ytEmbedHandlers());
             } else {
                 UI.showSpinner(false);
-                UI.showPlayerError('This channel is offline and no recent video was found.');
+                UI.showPlayerError(ytErrorMessage(status.reason));
             }
-        });
+        }
+
+        // Reuse a fresh cached probe (with a videoId); otherwise re-check.
+        if (ytFresh(channel)) { present(channel.yt); }
+        else { YT.probe(channel).then(present); }
     }
 
     function switchChannel(delta) {
@@ -388,7 +417,7 @@
         stopYtProbing();
         state.mode = 'settings';
         state.settingsIndex = 0;
-        UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+        refreshSettingsInfo();
         UI.show('settings');
         focusSettings(0);
     }
@@ -396,8 +425,12 @@
         return [
             UI.els['settings-url'],
             document.getElementById('settings-bundled'),
-            document.getElementById('settings-clear-fav')
+            document.getElementById('settings-clear-fav'),
+            document.getElementById('settings-ytkey')
         ];
+    }
+    function refreshSettingsInfo() {
+        UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION, Store.getYtApiKey());
     }
     function focusSettings(i) {
         var fields = settingsFields();
@@ -412,18 +445,26 @@
                 OSK.open(Store.getPlaylistUrl(), function (text) {
                     if (text === null) { return; }
                     Store.setPlaylistUrl(text);
-                    UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+                    refreshSettingsInfo();
                     UI.toast('Playlist URL saved');
                 });
                 break;
             case 1: // bundled sample
                 Store.setPlaylistUrl(Store.DEFAULT_URL);
-                UI.setSettingsInfo(Store.getPlaylistUrl(), Player.getEngineName(), VERSION);
+                refreshSettingsInfo();
                 UI.toast('Using bundled sample playlist');
                 break;
             case 2: // clear favorites
                 Store.clearFavorites();
                 UI.toast('Favorites cleared');
+                break;
+            case 3: // YouTube Data API key
+                OSK.open(Store.getYtApiKey(), function (text) {
+                    if (text === null) { return; }
+                    Store.setYtApiKey(text);
+                    refreshSettingsInfo();
+                    UI.toast('YouTube API key saved');
+                });
                 break;
         }
     }

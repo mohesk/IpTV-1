@@ -1,150 +1,83 @@
 /* ===========================================================================
-   youtube.js  -  YouTube channel live-detection + metadata extraction.
+   youtube.js  -  YouTube channel live-detection + metadata via the official
+   YouTube Data API v3.
 
-   Detection is fully client-side: fetch a channel's /live page and read the
-   ytInitialPlayerResponse / ytInitialData JSON the page embeds. No API key.
+   Why the API (and not scraping youtube.com): a TV browser sends an Origin
+   header on cross-origin requests, and youtube.com returns no
+   Access-Control-Allow-Origin (so the body is unreadable) and 302-redirects to
+   a consent wall. The Data API IS browser-callable (returns CORS headers) and
+   needs only an API key the user pastes into Settings.
 
-   The pure parsing helpers (extractJsonObject, classify, deepFindVideo,
-   parseProbeHtml, buildChannels) are exported for unit testing in Node. The
-   async wrappers (load, probe) use fetch/XHR and only run in the app.
+   probe(channel):
+     1. search?eventType=live  -> if an item, the channel is LIVE.
+     2. else search?order=date -> the channel's latest video (offline state).
+
+   Pure helpers (buildChannels, parseSearchItem, relativeFromIso) are exported
+   for unit testing in Node. The async wrappers (load, probe) run in the app.
    =========================================================================== */
 var YT = (function () {
     'use strict';
 
+    var GROUP = '📺 YouTube'; // 📺 YouTube
+    var API = 'https://www.googleapis.com/youtube/v3/search';
+
     // ---- pure helpers -------------------------------------------------------
 
-    // Find the first {...} object after `marker` and JSON.parse it. Uses a
-    // string-aware brace scanner so braces inside JSON strings don't confuse it.
-    function extractJsonObject(html, marker) {
-        if (typeof html !== 'string') { return null; }
-        var idx = html.indexOf(marker);
-        if (idx === -1) { return null; }
-        var start = html.indexOf('{', idx);
-        if (start === -1) { return null; }
-
-        var depth = 0, inStr = false, esc = false;
-        for (var i = start; i < html.length; i++) {
-            var c = html.charAt(i);
-            if (inStr) {
-                if (esc) { esc = false; }
-                else if (c === '\\') { esc = true; }
-                else if (c === '"') { inStr = false; }
-            } else if (c === '"') {
-                inStr = true;
-            } else if (c === '{') {
-                depth++;
-            } else if (c === '}') {
-                depth--;
-                if (depth === 0) {
-                    try { return JSON.parse(html.slice(start, i + 1)); }
-                    catch (e) { return null; }
-                }
-            }
-        }
-        return null;
-    }
-
-    function pickThumb(t) {
-        if (t && t.thumbnails && t.thumbnails.length) {
-            return t.thumbnails[t.thumbnails.length - 1].url;
-        }
-        return '';
+    function pickThumb(thumbs) {
+        if (!thumbs) { return ''; }
+        var t = thumbs.maxres || thumbs.standard || thumbs.high || thumbs.medium || thumbs.default;
+        return (t && t.url) ? t.url : '';
     }
 
     function thumbFor(id) {
         return id ? 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg' : '';
     }
 
-    // Given a parsed ytInitialPlayerResponse, return a live status or null.
-    function classify(player) {
-        if (!player || !player.streamingData) { return null; }
-        var hls = player.streamingData.hlsManifestUrl;
-        var status = player.playabilityStatus && player.playabilityStatus.status;
-        var vd = player.videoDetails || {};
-        var isLive = vd.isLive === true ||
-                     (vd.isLiveContent === true && status === 'OK' && !!hls);
-        if (hls && status === 'OK' && isLive) {
-            return {
-                state: 'live',
-                hlsUrl: hls,
-                videoId: vd.videoId || '',
-                title: vd.title || '',
-                thumbnail: pickThumb(vd.thumbnail) || thumbFor(vd.videoId)
-            };
+    // Parse a YouTube Data API search response. Returns the first video's
+    // { videoId, title, thumbnail, publishedAt } or null when there are no
+    // items. Throws on an API error payload (carrying .reason, e.g.
+    // 'quotaExceeded' / 'keyInvalid') so callers can report it.
+    function parseSearchItem(json) {
+        if (json && json.error) {
+            var errs = json.error.errors;
+            var reason = (errs && errs.length && errs[0].reason) || '';
+            var e = new Error(json.error.message || 'YouTube API error');
+            e.reason = reason;
+            throw e;
         }
-        return null;
+        if (!json || !json.items || !json.items.length) { return null; }
+        var it = json.items[0];
+        var sn = it.snippet || {};
+        var vid = (it.id && it.id.videoId) ? it.id.videoId : '';
+        if (!vid) { return null; }
+        return {
+            videoId: vid,
+            title: sn.title || '',
+            thumbnail: pickThumb(sn.thumbnails) || thumbFor(vid),
+            publishedAt: sn.publishedAt || ''
+        };
     }
 
-    // Flatten a YouTube text object ({simpleText} or {runs:[{text}]}) to a string.
-    function textOf(t) {
-        if (!t) { return ''; }
-        if (typeof t === 'string') { return t; }
-        if (t.simpleText !== undefined) { return t.simpleText; }
-        if (t.runs && t.runs.length) {
-            return t.runs.map(function (r) { return r.text || ''; }).join('');
+    // Turn an ISO timestamp into a coarse "3 days ago" string. nowMs is passed
+    // in so this stays pure and testable.
+    function relativeFromIso(iso, nowMs) {
+        if (!iso) { return 'recently'; }
+        var t = Date.parse(iso);
+        if (isNaN(t)) { return 'recently'; }
+        var s = Math.floor((nowMs - t) / 1000);
+        if (s < 0) { s = 0; }
+        var units = [
+            ['year', 31536000], ['month', 2592000], ['week', 604800],
+            ['day', 86400], ['hour', 3600], ['minute', 60]
+        ];
+        for (var i = 0; i < units.length; i++) {
+            var n = Math.floor(s / units[i][1]);
+            if (n >= 1) { return n + ' ' + units[i][0] + (n > 1 ? 's' : '') + ' ago'; }
         }
-        return '';
+        return 'just now';
     }
 
-    // Depth-first search for the first node that looks like a video
-    // (has a videoId and a title/headline). Returns its id/title/thumb/since.
-    function deepFindVideo(node, guard) {
-        guard = guard || { n: 0 };
-        if (!node || typeof node !== 'object') { return null; }
-        if (guard.n++ > 300000) { return null; } // bound total nodes visited (YouTube JSON is wide, not deep)
-
-        if (node.videoId && (node.title || node.headline)) {
-            return {
-                videoId: node.videoId,
-                title: textOf(node.title || node.headline),
-                thumbnail: pickThumb(node.thumbnail) || thumbFor(node.videoId),
-                sinceText: textOf(node.publishedTimeText)
-            };
-        }
-
-        if (Array.isArray(node)) {
-            for (var i = 0; i < node.length; i++) {
-                var r = deepFindVideo(node[i], guard);
-                if (r) { return r; }
-            }
-        } else {
-            for (var k in node) {
-                if (!Object.prototype.hasOwnProperty.call(node, k)) { continue; }
-                var v = node[k];
-                if (v && typeof v === 'object') {
-                    var r2 = deepFindVideo(v, guard);
-                    if (r2) { return r2; }
-                }
-            }
-        }
-        return null;
-    }
-
-    // Classify a fetched /live page into a status object.
-    function parseProbeHtml(html) {
-        if (typeof html !== 'string' || !html) { return { state: 'error' }; }
-
-        var player = extractJsonObject(html, 'ytInitialPlayerResponse');
-        var live = classify(player);
-        if (live) { return live; }
-
-        var data = extractJsonObject(html, 'ytInitialData');
-        var vid = data ? deepFindVideo(data) : null;
-        if (vid && vid.videoId) {
-            return {
-                state: 'offline',
-                videoId: vid.videoId,
-                title: vid.title,
-                thumbnail: vid.thumbnail,
-                sinceText: vid.sinceText || 'recently'
-            };
-        }
-        return { state: 'error' };
-    }
-
-    var GROUP = '📺 YouTube'; // 📺 YouTube
-
-    // Map the JSON list to channel objects compatible with the app's model.
+    // Map the JSON channel list to channel objects compatible with the app.
     function buildChannels(list) {
         if (!Array.isArray(list)) { return []; }
         return list
@@ -159,6 +92,7 @@ var YT = (function () {
                     group: GROUP,
                     type: 'youtube',
                     handle: handle,
+                    channelId: e.channelId || '',
                     chno: '',
                     attrs: {},
                     yt: null,
@@ -169,7 +103,29 @@ var YT = (function () {
 
     // ---- async wrappers (browser/TV only) ----------------------------------
 
-    function httpGet(url) {
+    function now() { return (Date && Date.now) ? Date.now() : 0; }
+
+    // GET that returns the response body even on a 4xx/5xx, so the API's JSON
+    // error payload (quota/key) can be parsed rather than swallowed.
+    function apiGet(url) {
+        if (typeof fetch === 'function') {
+            return fetch(url, { cache: 'no-store' }).then(function (r) { return r.text(); });
+        }
+        return new Promise(function (resolve, reject) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) { return; }
+                if (xhr.responseText) { resolve(xhr.responseText); }
+                else { reject(new Error('Network error')); }
+            };
+            xhr.onerror = function () { reject(new Error('Network error')); };
+            xhr.send();
+        });
+    }
+
+    // Plain GET for the bundled, same-origin channel list.
+    function localGet(url) {
         if (typeof fetch === 'function') {
             return fetch(url, { cache: 'no-store' }).then(function (r) {
                 if (!r.ok) { throw new Error('HTTP ' + r.status); }
@@ -190,18 +146,26 @@ var YT = (function () {
         });
     }
 
-    // Optional CORS-proxy prefix for dev-browser testing (blank on TV).
-    function proxied(url) {
-        var p = (typeof Store !== 'undefined' && Store.getYtProxy)
-            ? Store.getYtProxy() : '';
-        return p ? (p + encodeURIComponent(url)) : url;
+    function getApiKey() {
+        return (typeof Store !== 'undefined' && Store.getYtApiKey) ? Store.getYtApiKey() : '';
     }
 
-    function now() { return (Date && Date.now) ? Date.now() : 0; }
+    function searchOne(channelId, mode, key) {
+        var url = API + '?part=snippet&type=video&maxResults=1' +
+            '&channelId=' + encodeURIComponent(channelId) +
+            '&key=' + encodeURIComponent(key) +
+            (mode === 'live' ? '&eventType=live' : '&order=date');
+        return apiGet(url).then(function (text) {
+            var json;
+            try { json = JSON.parse(text); }
+            catch (e) { throw new Error('Bad API response'); }
+            return parseSearchItem(json);
+        });
+    }
 
-    // Load the bundled channel list (same-origin, no proxy).
+    // Load the bundled channel list (same-origin, no key needed).
     function load() {
-        return httpGet('config/youtube_channels.json').then(function (text) {
+        return localGet('config/youtube_channels.json').then(function (text) {
             var list;
             try { list = JSON.parse(text); }
             catch (e) { return []; }
@@ -209,25 +173,47 @@ var YT = (function () {
         }).catch(function () { return []; });
     }
 
-    // Probe one channel's live status. Never rejects: failures -> state:'error'.
+    // Probe one channel via the Data API. Never rejects: failures resolve to
+    // { state:'error', reason }.
     function probe(channel) {
-        var url = 'https://www.youtube.com/@' + channel.handle + '/live?hl=en';
-        return httpGet(proxied(url)).then(function (html) {
-            var s = parseProbeHtml(html);
-            s.checkedAt = now();
-            return s;
-        }).catch(function () {
-            return { state: 'error', checkedAt: now() };
+        var key = getApiKey();
+        if (!key) { return Promise.resolve({ state: 'error', reason: 'no-key', checkedAt: now() }); }
+        if (!channel.channelId) {
+            return Promise.resolve({ state: 'error', reason: 'no-channel-id', checkedAt: now() });
+        }
+        return searchOne(channel.channelId, 'live', key).then(function (live) {
+            if (live) {
+                return {
+                    state: 'live',
+                    videoId: live.videoId,
+                    title: live.title,
+                    thumbnail: live.thumbnail,
+                    checkedAt: now()
+                };
+            }
+            return searchOne(channel.channelId, 'latest', key).then(function (v) {
+                if (v) {
+                    return {
+                        state: 'offline',
+                        videoId: v.videoId,
+                        title: v.title,
+                        thumbnail: v.thumbnail,
+                        sinceText: relativeFromIso(v.publishedAt, now()),
+                        checkedAt: now()
+                    };
+                }
+                return { state: 'error', reason: 'no-video', checkedAt: now() };
+            });
+        }).catch(function (e) {
+            return { state: 'error', reason: (e && e.reason) || (e && e.message) || 'fetch', checkedAt: now() };
         });
     }
 
     return {
         GROUP: GROUP,
-        extractJsonObject: extractJsonObject,
-        classify: classify,
-        deepFindVideo: deepFindVideo,
-        parseProbeHtml: parseProbeHtml,
         buildChannels: buildChannels,
+        parseSearchItem: parseSearchItem,
+        relativeFromIso: relativeFromIso,
         load: load,
         probe: probe
     };

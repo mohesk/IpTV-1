@@ -1,15 +1,15 @@
 [
-  { "handle": "RadioShemroon", "name": "Radio Shemroon" },
-  { "handle": "gghamarimpp", "name": "GG Hamari" },
-  { "handle": "MehdiMirghaderi", "name": "Mehdi Mirghaderi" },
-  { "handle": "TousiTV", "name": "Tousi TV" },
-  { "handle": "Behnamamini1", "name": "Behnam Amini" },
-  { "handle": "cinamarex", "name": "Cinamarex" },
-  { "handle": "MoradVaisi", "name": "Morad Vaisi" },
-  { "handle": "Fravahar", "name": "Fravahar" },
-  { "handle": "JamshidChalangi1", "name": "Jamshid Chalangi" },
-  { "handle": "MortezaEsmailpour", "name": "Morteza Esmailpour" },
-  { "handle": "upozittv", "name": "Upozit TV" },
-  { "handle": "MojVahedi", "name": "Moj Vahedi" },
-  { "handle": "project.leon.official", "name": "Project Leon" }
+  { "handle": "RadioShemroon", "name": "Radio Shemroon", "channelId": "UCuM3rPi4h1yUjE6EJDilffA" },
+  { "handle": "gghamarimpp", "name": "GG Hamari", "channelId": "UCHeQ2gXTTiLUvpgSuM8qPCg" },
+  { "handle": "MehdiMirghaderi", "name": "Mehdi Mirghaderi", "channelId": "UC3flL-Vnba01HE7mBKLGCfw" },
+  { "handle": "TousiTV", "name": "Tousi TV", "channelId": "UCjJec0wv1EUomjrBNt1xCTA" },
+  { "handle": "Behnamamini1", "name": "Behnam Amini", "channelId": "UC0Uy0232OXoaLotOUWUnunA" },
+  { "handle": "cinamarex", "name": "Cinamarex", "channelId": "UCIueilRpFpg3dLtW-e4BgMA" },
+  { "handle": "MoradVaisi", "name": "Morad Vaisi", "channelId": "UCbNeU6MiUdbzxiv_YK3EjQg" },
+  { "handle": "Fravahar", "name": "Fravahar", "channelId": "UCfksCrbsTqz5QcmjETTd_Ow" },
+  { "handle": "JamshidChalangi1", "name": "Jamshid Chalangi", "channelId": "UCsEfDPYAdyphOC2vjEB27HQ" },
+  { "handle": "MortezaEsmailpour", "name": "Morteza Esmailpour", "channelId": "UCNBzMSW8EEdWyZ83WhLCP1g" },
+  { "handle": "upozittv", "name": "Upozit TV", "channelId": "UCWCvhQCCBD2d8j-kDtcboyw" },
+  { "handle": "MojVahedi", "name": "Moj Vahedi", "channelId": "UCqngcLmyPqZwEfcjwMd_d-A" },
+  { "handle": "project.leon.official", "name": "Project Leon", "channelId": "UCeDoJq7XVhWx2-J3PXfklOQ" }
 ]

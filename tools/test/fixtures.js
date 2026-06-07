@@ -1,41 +1,47 @@
 'use strict';
 
-// A page where the channel is currently live.
-const LIVE_HTML = `
-<!doctype html><html><head><title>Live Chan - YouTube</title></head><body>
-<script>var ytInitialPlayerResponse = {
-  "playabilityStatus": {"status": "OK"},
-  "streamingData": {"hlsManifestUrl": "https://manifest.googlevideo.com/api/live/abc.m3u8"},
-  "videoDetails": {
-    "videoId": "LIVEvid123",
-    "title": "Tonight Live Show",
-    "isLive": true,
-    "isLiveContent": true,
-    "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/LIVEvid123/default.jpg"},
-                                  {"url": "https://i.ytimg.com/vi/LIVEvid123/hqdefault.jpg"}]}
+// YouTube Data API v3 search responses (part=snippet, type=video).
+
+// A live search hit (eventType=live returned an item).
+const LIVE_SEARCH = {
+  items: [{
+    id: { kind: 'youtube#video', videoId: 'LIVEvid123' },
+    snippet: {
+      title: 'Tonight Live Show',
+      publishedAt: '2026-06-07T18:00:00Z',
+      thumbnails: {
+        default: { url: 'https://i.ytimg.com/vi/LIVEvid123/default.jpg' },
+        medium: { url: 'https://i.ytimg.com/vi/LIVEvid123/mqdefault.jpg' },
+        high: { url: 'https://i.ytimg.com/vi/LIVEvid123/hqdefault.jpg' }
+      }
+    }
+  }]
+};
+
+// A latest-video search hit (order=date), used for the offline state.
+const LATEST_SEARCH = {
+  items: [{
+    id: { kind: 'youtube#video', videoId: 'PASTvid456' },
+    snippet: {
+      title: "Yesterday's Stream",
+      publishedAt: '2026-06-05T12:00:00Z',
+      thumbnails: {
+        default: { url: 'https://i.ytimg.com/vi/PASTvid456/default.jpg' }
+      }
+    }
+  }]
+};
+
+// No results (channel not live / no videos).
+const EMPTY_SEARCH = { kind: 'youtube#searchListResponse', items: [] };
+
+// An API error payload (quota exhausted).
+const ERROR_QUOTA = {
+  error: {
+    code: 403,
+    message: 'The request cannot be completed because you have exceeded your quota.',
+    errors: [{ message: 'quota', domain: 'youtube.quota', reason: 'quotaExceeded' }]
   }
-};</script>
-</body></html>`;
+};
 
-// A page where the live stream is offline; ytInitialData carries the latest video.
-const OFFLINE_HTML = `
-<!doctype html><html><head><title>Some Chan - YouTube</title></head><body>
-<script>var ytInitialPlayerResponse = {
-  "playabilityStatus": {"status": "LIVE_STREAM_OFFLINE"}
-};</script>
-<script>var ytInitialData = {
-  "contents": {"section": {"items": [
-    {"videoRenderer": {
-      "videoId": "PASTvid456",
-      "title": {"runs": [{"text": "Yesterday's Stream"}]},
-      "publishedTimeText": {"simpleText": "Streamed 2 days ago"},
-      "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/PASTvid456/hqdefault.jpg"}]}
-    }}
-  ]}}
-};</script>
-</body></html>`;
-
-// A page with no usable YouTube JSON at all.
-const GARBAGE_HTML = `<!doctype html><html><body>nothing here</body></html>`;
-
-module.exports = { LIVE_HTML, OFFLINE_HTML, GARBAGE_HTML };
+module.exports = { LIVE_SEARCH, LATEST_SEARCH, EMPTY_SEARCH, ERROR_QUOTA };
