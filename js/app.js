@@ -46,6 +46,9 @@
         KEYS.register();
 
         document.addEventListener('keydown', onKey, false);
+        // Hardware Back/Return key (Tizen): delivered to the app even when a
+        // focused YouTube iframe is swallowing keydown events.
+        document.addEventListener('tizenhwkey', onHwKey, false);
 
         groupNav = new ListNav(UI.els['group-list'], {
             onFocus: onGroupFocus
@@ -557,7 +560,7 @@
             case K.CHANNEL_DOWN:
                 channelNav.move(1); return true;
             default:
-                if (KEYS.isBack(code)) { exitApp(); return true; }
+                if (KEYS.isBack(code)) { handleBack(); return true; }
                 return false;
         }
     }
@@ -586,7 +589,7 @@
             case K.RIGHT:
                 bumpOsd(); return true;
             default:
-                if (KEYS.isBack(code)) { stopPlayback(); return true; }
+                if (KEYS.isBack(code)) { handleBack(); return true; }
                 return false;
         }
     }
@@ -598,8 +601,35 @@
             case K.DOWN:  focusSettings(state.settingsIndex + 1); return true;
             case K.ENTER: activateSetting(); return true;
             default:
-                if (KEYS.isBack(code)) { closeSettings(); return true; }
+                if (KEYS.isBack(code)) { handleBack(); return true; }
                 return false;
+        }
+    }
+
+    // Centralised Back handling. Reached from keydown (works when the app has
+    // focus) AND from the Tizen hardware-key event (works even when a focused
+    // cross-origin iframe — the YouTube embed — swallows keydown). A short guard
+    // de-dupes the two events when the platform fires both for one press.
+    var lastBackAt = 0;
+    function handleBack() {
+        var t = (Date && Date.now) ? Date.now() : 0;
+        if (t && t - lastBackAt < 250) { return; }
+        lastBackAt = t;
+        if (OSK.isOpen()) { return; }   // the OSK handles its own Back via keydown
+        switch (state.mode) {
+            case 'player':   stopPlayback(); break;
+            case 'settings': closeSettings(); break;
+            case 'browser':  exitApp(); break;
+            default: break;             // splash: ignore
+        }
+    }
+
+    // Tizen dispatches this for the hardware Back/Return key regardless of which
+    // element (including an iframe) has DOM focus.
+    function onHwKey(e) {
+        if (e && e.keyName === 'back') {
+            if (typeof e.preventDefault === 'function') { e.preventDefault(); }
+            handleBack();
         }
     }
 
