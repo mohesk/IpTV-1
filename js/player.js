@@ -177,7 +177,11 @@ var Player = (function () {
 
         ytFrame.classList.remove('hidden');
         ytFrame.onerror = function () { fire('onError', 'Could not load the video.'); };
-        ytFrame.src = 'https://www.youtube.com/embed/' + videoId +
+        // A referrer is required or YouTube returns "Error 153". Set it on the
+        // element too (not just the HTML attribute) before navigating, and use
+        // the privacy-enhanced nocookie host which is more embed-permissive.
+        try { ytFrame.referrerPolicy = 'strict-origin-when-cross-origin'; } catch (e) {}
+        ytFrame.src = 'https://www.youtube-nocookie.com/embed/' + videoId +
                       '?autoplay=1&playsinline=1&rel=0';
         paused = false;
         fire('onPlaying');

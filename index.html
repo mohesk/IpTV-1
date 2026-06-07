@@ -53,8 +53,11 @@
         <object id="av-player" type="application/avplayer"></object>
         <!-- HTML5 fallback (dev browser / native-HLS TVs) -->
         <video id="html5-player" class="html5-player" playsinline></video>
-        <!-- YouTube IFrame embed (offline channels' latest video) -->
+        <!-- YouTube IFrame embed. referrerpolicy is required: YouTube returns
+             "Error 153 / player configuration error" when the embed loads with
+             no referrer (the default in an app context). -->
         <iframe id="yt-embed" class="yt-embed hidden" frameborder="0"
+                referrerpolicy="strict-origin-when-cross-origin"
                 allow="autoplay; encrypted-media" allowfullscreen></iframe>
 
         <div id="player-spinner" class="player-spinner hidden">
